@@ -1,0 +1,73 @@
+# Country profile: Thailand.
+#
+# API_DATA_SOURCES_GUIDE.md section 8 marks Thailand as an expansion
+# target: TPSO (CPI/PPI) is available now, Bank of Thailand (money supply)
+# is not yet available (registration pending). This profile is provided so
+# the engine can already accept Thailand input once observations exist; it
+# does not imply provider integration is complete.
+country: THA
+profile_version: "1.0.0"
+
+headline_consumer:
+  source_indicator: headline_consumer_inflation
+
+underlying:
+  # TPSO does not publish an official core/trimmed/median series in the
+  # documented sources, so weighted median is used as the most defensible
+  # default per COUNTRY guidelines section 5.2's hierarchy.
+  preferred_method: weighted_median
+  fallback_methods:
+    - trimmed_mean
+  trimmed_mean:
+    alpha: 0.10
+    beta: 0.10
+    boundary_handling: exclude_whole
+  core_exclusion:
+    excluded_categories: [food, energy]
+
+essential_basket:
+  version: "2026.1"
+  methodology: standardized_portfolio_project_weights
+  categories:
+    food: 0.30
+    housing: 0.28
+    energy: 0.10
+    transport: 0.14
+    healthcare: 0.08
+    communications: 0.10
+
+fixed_lifestyle:
+  basket_version: "2026.1"
+  replacement_hierarchy:
+    - identical_product
+    - same_brand_size
+    - same_spec_quality
+    - closest_equivalent
+    - category_proxy
+
+housing:
+  mortgage_term_years: 30
+  loan_to_value: 0.80
+  payment_frequency: monthly
+  representative_property_price: 3000000
+  representative_mortgage_rate: 0.065
+  pressure_score_weights:
+    rent: 0.4
+    mortgage: 0.4
+    burden: 0.2
+
+money:
+  preferred_aggregate: M2
+
+producer_import:
+  component_weights:
+    ppi: 0.30
+    import: 0.35
+    energy: 0.20
+    commodity: 0.15
+
+purchasing_power:
+  income_definition: gross
+  wage_measure: mean
+
+methodology_version: "1.0.0"

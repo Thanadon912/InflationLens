@@ -1,0 +1,73 @@
+# Country profile: Euro Area.
+#
+# Mirrors CALCULATION_ENGINE_GUIDELINES.md section 11.1's EA example.
+# Eurostat does not publish an official trimmed-mean/weighted-median core
+# HICP the way BLS publishes core CPI, so weighted median is preferred
+# here per COUNTRY guidelines section 5.2's hierarchy (official core ->
+# weighted median -> trimmed mean -> model-based).
+country: EA
+profile_version: "1.0.0"
+
+headline_consumer:
+  source_indicator: headline_consumer_inflation
+
+underlying:
+  preferred_method: weighted_median
+  fallback_methods:
+    - trimmed_mean
+    - official_core
+  trimmed_mean:
+    alpha: 0.10
+    beta: 0.10
+    boundary_handling: exclude_whole
+  core_exclusion:
+    excluded_categories: [food, energy]
+
+essential_basket:
+  version: "2026.1"
+  methodology: lower_income_expenditure_weights
+  categories:
+    food: 0.22
+    housing: 0.38
+    energy: 0.10
+    transport: 0.13
+    healthcare: 0.10
+    communications: 0.07
+
+fixed_lifestyle:
+  basket_version: "2026.1"
+  replacement_hierarchy:
+    - identical_product
+    - same_brand_size
+    - same_spec_quality
+    - closest_equivalent
+    - category_proxy
+
+housing:
+  mortgage_term_years: 25
+  loan_to_value: 0.80
+  payment_frequency: monthly
+  representative_property_price: 320000
+  representative_mortgage_rate: 0.038
+  pressure_score_weights:
+    rent: 0.4
+    mortgage: 0.4
+    burden: 0.2
+
+money:
+  # ECB Data Portal API section (API_DATA_SOURCES_GUIDE.md 6.2): M1/M2/M3
+  # available; broad money for the Euro Area is conventionally M3.
+  preferred_aggregate: M3
+
+producer_import:
+  component_weights:
+    ppi: 0.35
+    import: 0.35
+    energy: 0.20
+    commodity: 0.10
+
+purchasing_power:
+  income_definition: gross
+  wage_measure: mean
+
+methodology_version: "1.0.0"

@@ -1,0 +1,76 @@
+# Country profile: United States.
+#
+# Structure follows the example in CALCULATION_ENGINE_GUIDELINES.md section
+# 11.1, extended with the configuration every country engine module needs
+# (ENGINE guidelines section 11: weights, trim percentages, mortgage
+# assumptions, and fallback methods must never be hard-coded in
+# calculation code).
+country: USA
+profile_version: "1.0.0"
+
+headline_consumer:
+  source_indicator: headline_consumer_inflation
+
+underlying:
+  # COUNTRY guidelines section 5.2 preferred hierarchy; BLS publishes an
+  # official core CPI (all items less food and energy), so it is preferred
+  # here, with weighted median / trimmed mean as documented fallbacks.
+  preferred_method: official_core
+  fallback_methods:
+    - trimmed_mean
+    - weighted_median
+  trimmed_mean:
+    alpha: 0.08
+    beta: 0.08
+    boundary_handling: exclude_whole
+  core_exclusion:
+    excluded_categories: [food, energy]
+
+essential_basket:
+  version: "2026.1"
+  methodology: lower_income_expenditure_weights
+  categories:
+    food: 0.24
+    housing: 0.42
+    energy: 0.08
+    transport: 0.12
+    healthcare: 0.09
+    communications: 0.05
+
+fixed_lifestyle:
+  basket_version: "2026.1"
+  replacement_hierarchy:
+    - identical_product
+    - same_brand_size
+    - same_spec_quality
+    - closest_equivalent
+    - category_proxy
+
+housing:
+  mortgage_term_years: 30
+  loan_to_value: 0.80
+  payment_frequency: monthly
+  representative_property_price: 420000
+  representative_mortgage_rate: 0.065
+  pressure_score_weights:
+    rent: 0.4
+    mortgage: 0.4
+    burden: 0.2
+
+money:
+  preferred_aggregate: M2
+
+producer_import:
+  component_weights:
+    ppi: 0.40
+    import: 0.30
+    energy: 0.20
+    commodity: 0.10
+
+purchasing_power:
+  # COUNTRY guidelines section 13.6: preserve mean vs median and gross vs
+  # disposable income definitions rather than mixing them silently.
+  income_definition: gross
+  wage_measure: mean
+
+methodology_version: "1.0.0"

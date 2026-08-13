@@ -1,0 +1,35 @@
+# Methodology version registry.
+#
+# CALCULATION_ENGINE_GUIDELINES.md section 11.1 and COUNTRY_INFLATION_METHODS.md
+# section 19 require semantic versioning of formulas/weighting schemes and
+# state that any change to the formula, weighting scheme, category
+# definition, source hierarchy, missing-data treatment, seasonal-adjustment
+# policy, product-replacement rule, quality-adjustment policy, or
+# composite-score design requires a methodology version bump.
+#
+# config_version identifies this file's own revision, independent of any
+# single indicator's methodology_version (ENGINE guidelines section 21:
+# cache keys must include both).
+config_version: "methodology-registry-1.0.0"
+
+country:
+  headline_consumer_inflation: "1.0.0"
+  underlying_inflation: "1.0.0"
+  essential_cost_inflation: "1.0.0"
+  fixed_lifestyle_inflation: "1.0.0"
+  housing_inflation: "1.0.0"
+  broad_money_expansion: "1.0.0"
+  excess_money_growth: "1.0.0"
+  producer_import_inflation: "1.0.0"
+  economy_wide_inflation: "1.0.0"
+  purchasing_power_squeeze: "1.0.0"
+
+global:
+  global_consumer_inflation: "1.0.0"
+  median_country_inflation: "1.0.0"
+  global_essential_inflation: "1.0.0"
+  global_monetary_expansion: "1.0.0"
+  global_excess_money_growth: "1.0.0"
+  global_producer_pressure: "1.0.0"
+  global_housing_asset_inflation: "1.0.0"
+  global_inflation_synchronization: "1.0.0"

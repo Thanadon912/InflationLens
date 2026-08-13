@@ -1,0 +1,52 @@
+# Global aggregation policy configuration.
+#
+# GLOBAL_INFLATION_METHODS.md section 2.3 requires the default weighting
+# method to be explicit; section 3.6 gives suggested coverage-threshold
+# defaults; section 12 requires synchronization thresholds to be
+# configurable; section 10.6 and 16 require composite-score weights to be
+# externalized. Actual per-country weight *values* (household-consumption
+# PPP, GDP PPP, population, etc.) are live data that would come from a
+# provider such as the World Bank -- out of scope for this phase -- so
+# they are not stored here. Callers supply per-country weight values in
+# the calculation request; this file only fixes policy choices (which
+# method is the default, what counts as adequate coverage, and how score
+# components are combined).
+config_version: "global-weights-1.0.0"
+
+# GLOBAL guidelines section 5.2: "Use country headline CPI rates
+# aggregated with household-consumption PPP weights" as the default.
+default_weight_method: household_consumption_ppp
+
+# GLOBAL guidelines section 3.6.
+coverage_thresholds:
+  consumption_ppp_minimum_percent: 85.0
+  gdp_ppp_minimum_percent: 85.0
+  population_minimum_percent: 80.0
+
+# GLOBAL guidelines section 9: the selected method must be configured and
+# returned in metadata.
+excess_money_growth:
+  default_method: aggregate_first # aggregate_first | country_first
+
+# GLOBAL guidelines section 12.2, 12.7.
+synchronization:
+  default_threshold_percent: 2.0
+  composite_weights:
+    share_accelerating: 0.4
+    share_above_threshold: 0.4
+    dispersion: 0.2
+
+# GLOBAL guidelines section 10.6: producer-pressure composite must be a
+# standardized score, never labeled an inflation rate.
+producer_pressure:
+  composite_weights:
+    ppi: 0.30
+    import: 0.25
+    commodity: 0.25
+    logistics: 0.20
+
+# GLOBAL guidelines section 11.3: possible weight bases for house-price
+# aggregation are housing-market value, GDP PPP, population, or number of
+# households. Default chosen here; can be overridden per-request.
+housing_assets:
+  house_price_weight_basis: gdp_ppp

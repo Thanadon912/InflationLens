@@ -1,0 +1,157 @@
+# Indicator registry: the 18 lenses this engine implements.
+#
+# CALCULATION_ENGINE_GUIDELINES.md section 1 requires support for 10
+# country indicators and 8 global indicators. This file is descriptive
+# metadata consumed by the /meta/indicators API endpoint (so the frontend
+# can explain every displayed value per COUNTRY guidelines section 20's
+# four required questions); it is not consulted by the engine functions
+# themselves, which validate units/frequencies against literal constants
+# in code (ENGINE guidelines section 5.2's UnitMismatchError) rather than
+# trusting a registry file at calculation time.
+config_version: "indicator-registry-1.0.0"
+
+country:
+  headline_consumer_inflation:
+    name: Headline Consumer Inflation
+    accepted_units: [index]
+    frequency: monthly
+    required_inputs: [all_items_cpi_index]
+    outputs: [yoy, mom, three_month_annualized]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#4"
+
+  underlying_inflation:
+    name: Underlying Inflation
+    accepted_units: [index, percent_yoy]
+    frequency: monthly
+    required_inputs: [component_indexes_or_rates, component_weights]
+    outputs: [selected_value, core_value, trimmed_mean_value, weighted_median_value]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#5"
+
+  essential_cost_inflation:
+    name: Essential Cost Inflation
+    accepted_units: [percent_yoy, index]
+    frequency: monthly
+    required_inputs: [category_rates_or_indexes, category_weights]
+    outputs: [essential_yoy]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#6"
+
+  fixed_lifestyle_inflation:
+    name: Fixed-Lifestyle Inflation
+    accepted_units: [currency, currency_per_unit]
+    frequency: monthly
+    required_inputs: [reference_period_quantities, item_prices]
+    outputs: [fixed_lifestyle_yoy, item_contributions, unit_price_inflation]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#7"
+
+  housing_inflation:
+    name: Housing Inflation
+    accepted_units: [index, currency]
+    frequency: monthly
+    required_inputs: [rent_index, house_price_index, mortgage_assumptions]
+    outputs: [rent_inflation, house_price_inflation, mortgage_payment_inflation, housing_burden_percent]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#8"
+
+  broad_money_expansion:
+    name: Broad Money Expansion
+    accepted_units: [currency, local_currency]
+    frequency: monthly
+    required_inputs: [broad_money_level]
+    outputs: [yoy, per_capita_yoy, money_to_real_output_ratio]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#9"
+
+  excess_money_growth:
+    name: Excess Money Growth
+    accepted_units: [percent_yoy]
+    frequency: quarterly
+    required_inputs: [broad_money_growth, real_output_growth]
+    outputs: [simple_emg, velocity_adjusted_mp]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#10"
+
+  producer_import_inflation:
+    name: Producer and Import Inflation
+    accepted_units: [index]
+    frequency: monthly
+    required_inputs: [ppi_index, import_price_index]
+    outputs: [ppi_inflation, import_inflation, exchange_rate_pass_through, upstream_pressure_score]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#11"
+
+  economy_wide_inflation:
+    name: Economy-Wide Inflation
+    accepted_units: [currency]
+    frequency: quarterly
+    required_inputs: [nominal_gdp, real_gdp]
+    outputs: [gdp_deflator_inflation, domestic_demand_deflator_inflation]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#12"
+
+  purchasing_power_squeeze:
+    name: Purchasing-Power Squeeze
+    accepted_units: [percent_yoy]
+    frequency: monthly
+    required_inputs: [nominal_wage_growth, headline_inflation, essential_inflation]
+    outputs: [real_wage_headline, real_wage_essential, purchasing_power_squeeze]
+    doc_ref: "COUNTRY_INFLATION_METHODS.md#13"
+
+global:
+  global_consumer_inflation:
+    name: Global Consumer Inflation
+    accepted_units: [percent_yoy, index]
+    frequency: monthly
+    required_inputs: [country_headline_rates_or_indexes, country_weights]
+    outputs: [arithmetic_rate, geometric_chained_rate]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#5"
+
+  median_country_inflation:
+    name: Median Country Inflation
+    accepted_units: [percent_yoy]
+    frequency: monthly
+    required_inputs: [country_headline_rates]
+    outputs: [median, weighted_median, p25, p75, min, max, count]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#6"
+
+  global_essential_inflation:
+    name: Global Essential Inflation
+    accepted_units: [percent_yoy]
+    frequency: monthly
+    required_inputs: [country_essential_rates, country_weights]
+    outputs: [consumption_weighted, population_weighted]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#7"
+
+  global_monetary_expansion:
+    name: Global Monetary Expansion
+    accepted_units: [percent_yoy]
+    frequency: monthly
+    required_inputs: [country_money_growth, country_weights]
+    outputs: [gdp_ppp_weighted, consumption_ppp_weighted, geometric]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#8"
+
+  global_excess_money_growth:
+    name: Global Excess Money Growth
+    accepted_units: [percent_yoy]
+    frequency: quarterly
+    required_inputs: [country_money_growth, country_real_gdp_growth, country_weights]
+    outputs: [aggregate_first, country_first, velocity_adjusted]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#9"
+
+  global_producer_pressure:
+    name: Global Producer Pressure
+    accepted_units: [percent_yoy, standard_deviation_score]
+    frequency: monthly
+    required_inputs: [country_ppi_rates, import_price_rates, commodity_indexes, logistics_index]
+    outputs: [ppi_component, import_component, commodity_component, logistics_component, composite_score]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#10"
+
+  global_housing_asset_inflation:
+    name: Global Housing and Asset Inflation
+    accepted_units: [index, percent_yoy]
+    frequency: quarterly
+    required_inputs: [country_house_price_index, country_rent_index, equity_index]
+    outputs: [house_price, rent, equity, gold, bitcoin, asset_income_ratio]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#11"
+
+  global_inflation_synchronization:
+    name: Global Inflation Synchronization
+    accepted_units: [percent_yoy]
+    frequency: monthly
+    required_inputs: [country_rates, threshold_percent]
+    outputs: [share_above, share_above_pop_weighted, share_accelerating, dispersion, iqr, sync_score]
+    doc_ref: "GLOBAL_INFLATION_METHODS.md#12"
