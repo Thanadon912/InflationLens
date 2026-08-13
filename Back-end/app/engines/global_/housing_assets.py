@@ -22,7 +22,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_housing_asset_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 
 def calculate(

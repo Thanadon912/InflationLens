@@ -11,7 +11,7 @@
 # the calculation request; this file only fixes policy choices (which
 # method is the default, what counts as adequate coverage, and how score
 # components are combined).
-config_version: "global-weights-1.0.0"
+config_version: "global-weights-1.1.0"
 
 # GLOBAL guidelines section 5.2: "Use country headline CPI rates
 # aggregated with household-consumption PPP weights" as the default.
@@ -22,6 +22,7 @@ coverage_thresholds:
   consumption_ppp_minimum_percent: 85.0
   gdp_ppp_minimum_percent: 85.0
   population_minimum_percent: 80.0
+  structurally_dominant_missing_weight: 0.20
 
 # GLOBAL guidelines section 9: the selected method must be configured and
 # returned in metadata.

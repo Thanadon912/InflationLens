@@ -22,6 +22,7 @@ VALID_OBS = {
     "observation_period": "2026-06",
     "value": 321.5,
     "retrieved_at": "2026-08-02T12:00:00Z",
+    "validation_status": "validated",
 }
 
 
@@ -152,10 +153,10 @@ class TestParseObservation:
             parse_observation(dict(VALID_OBS, confidence="super_high"))
 
     def test_underlying_construction_error_wrapped_as_schema_error(self):
-        # non-finite value trips Observation's own validation (DataQualityError),
-        # which parse_observation wraps into a SchemaError.
+        # A well-shaped but invalid numeric value is a domain error (HTTP 422).
         bad = dict(VALID_OBS, value=float("nan"))
-        with pytest.raises(SchemaError):
+        from app.engines.shared.errors import DataQualityError
+        with pytest.raises(DataQualityError):
             parse_observation(bad)
 
 

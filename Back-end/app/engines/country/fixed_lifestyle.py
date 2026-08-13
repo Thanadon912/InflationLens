@@ -25,7 +25,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "fixed_lifestyle_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 # COUNTRY guidelines section 7.5 product-replacement hierarchy, most to
 # least confident.
@@ -86,6 +86,7 @@ def calculate(
     package_sizes_base: Mapping[str, float] | None = None,
     replacements: Mapping[str, ItemReplacement] | None = None,
     quality_adjustment_factors: Mapping[str, float] | None = None,
+    quality_adjusted_prices_current: Mapping[str, float] | None = None,
     source_observations: tuple[Observation, ...] = (),
     input_series: tuple[InputProvenance, ...] = (),
     methodology_version: str = METHODOLOGY_VERSION,
@@ -154,11 +155,13 @@ def calculate(
     # difference": both are always reported, even when no adjustment
     # factors were supplied (in which case they are equal, and that
     # equality is itself the disclosure).
-    if quality_adjustment_factors:
-        adjusted_current = {
-            k: v * quality_adjustment_factors.get(k, 1.0) for k, v in prices_current.items()
-        }
-        fli_quality_adjusted = laspeyres_price_index(adjusted_current, prices_base, quantities_base)
+    if quality_adjusted_prices_current is not None:
+        fli_quality_adjusted = laspeyres_price_index(quality_adjusted_prices_current, prices_base, quantities_base)
+    elif quality_adjustment_factors:
+        raise DataQualityError(
+            "quality_adjustment_factors are not an independently documented price view; "
+            "supply quality_adjusted_prices_current explicitly"
+        )
     else:
         fli_quality_adjusted = fli_current
 

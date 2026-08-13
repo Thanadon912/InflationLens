@@ -21,7 +21,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "economy_wide_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 
 def gdp_deflator(nominal_gdp: float, real_gdp: float) -> float:

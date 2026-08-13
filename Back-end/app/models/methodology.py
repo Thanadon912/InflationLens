@@ -26,9 +26,18 @@ class InputProvenance:
 
     provider: str
     series_id: str
+    source_url: str | None = None
+    data_vintage: str | None = None
+    retrieved_at: str | None = None
 
     def to_dict(self) -> dict:
-        return {"provider": self.provider, "series_id": self.series_id}
+        return {
+            "provider": self.provider,
+            "series_id": self.series_id,
+            "source_url": self.source_url,
+            "data_vintage": self.data_vintage,
+            "retrieved_at": self.retrieved_at,
+        }
 
 
 @dataclass(frozen=True, order=True)

@@ -27,7 +27,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "housing_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 _PAYMENT_PERIODS_PER_YEAR = {"monthly": 12, "quarterly": 4, "annual": 1}
 

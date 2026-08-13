@@ -13,6 +13,7 @@ the returned ``IndicatorResult``/``CoverageReport``.
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from decimal import Decimal
 
 from app.engines.shared.errors import CoverageThresholdError, InvalidWeightError
 from app.models.coverage import CoverageReport
@@ -35,13 +36,13 @@ def renormalize_weights(
             unknown_keys=sorted(unknown),
         )
     subset = {k: v for k, v in weights.items() if k in available}
-    total = sum(subset.values())
+    total = sum((Decimal(str(value)) for value in subset.values()), Decimal("0"))
     if total <= 0:
         raise InvalidWeightError(
             "renormalize_weights: available components have zero total weight",
             available_keys=sorted(available),
         )
-    return {k: v / total for k, v in subset.items()}
+    return {k: float(Decimal(str(v)) / total) for k, v in subset.items()}
 
 
 def coverage_percent(available_measure: float, total_measure: float) -> float:

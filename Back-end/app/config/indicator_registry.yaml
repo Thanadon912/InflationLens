@@ -8,7 +8,7 @@
 # themselves, which validate units/frequencies against literal constants
 # in code (ENGINE guidelines section 5.2's UnitMismatchError) rather than
 # trusting a registry file at calculation time.
-config_version: "indicator-registry-1.0.0"
+config_version: "indicator-registry-1.1.0"
 
 country:
   headline_consumer_inflation:

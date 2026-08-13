@@ -24,7 +24,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.series import ObservationSeries
 
 INDICATOR_ID = "headline_consumer_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 ACCEPTED_UNITS = (Unit.INDEX,)
 ACCEPTED_FREQUENCIES = (Frequency.MONTHLY, Frequency.QUARTERLY, Frequency.ANNUAL)
 

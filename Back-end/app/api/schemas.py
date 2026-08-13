@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from app.engines.shared.errors import SeriesDefinitionError
+from app.engines.shared.errors import EngineError, SeriesDefinitionError
 from app.engines.shared.periods import Period, parse_period
 from app.models.enums import Confidence, Coverage, Frequency, Unit, ValidationStatus
 from app.models.observation import Observation
@@ -110,7 +110,7 @@ def parse_observation(raw: Mapping) -> Observation:
             value=get_float(raw, "value"),
             retrieved_at=str(require(raw, "retrieved_at")),
             validation_status=_parse_enum(
-                raw.get("validation_status", "validated"), ValidationStatus, field="validation_status"
+                require(raw, "validation_status"), ValidationStatus, field="validation_status"
             ),
             publication_date=raw.get("publication_date"),
             seasonally_adjusted=raw.get("seasonally_adjusted"),
@@ -121,8 +121,12 @@ def parse_observation(raw: Mapping) -> Observation:
             methodology_version=raw.get("methodology_version"),
             confidence=_parse_enum(raw["confidence"], Confidence, field="confidence") if raw.get("confidence") else None,
             coverage_status=_parse_enum(raw["coverage_status"], Coverage, field="coverage_status") if raw.get("coverage_status") else None,
+            component_id=get_str(raw, "component_id", required=False),
+            currency=get_str(raw, "currency", required=False),
         )
     except SchemaError:
+        raise
+    except EngineError:
         raise
     except Exception as exc:  # noqa: BLE001 - re-raised as a schema error with context
         raise SchemaError(f"Invalid observation: {exc}") from exc

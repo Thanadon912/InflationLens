@@ -54,6 +54,8 @@ class Observation:
     methodology_version: str | None = None
     confidence: Confidence | None = None
     coverage_status: Coverage | None = None
+    component_id: str | None = None
+    currency: str | None = None
 
     _period_cache: Period = field(init=False, repr=False, compare=False)
 
@@ -76,6 +78,14 @@ class Observation:
             raise SeriesDefinitionError("Observation.source_series_id must not be empty")
         if not self.geography:
             raise SeriesDefinitionError("Observation.geography must not be empty")
+        if self.validation_status != ValidationStatus.VALIDATED:
+            raise DataQualityError(
+                "Only validated observations may enter the calculation engine",
+                indicator=self.indicator_id,
+                geography=self.geography,
+                period=self.observation_period,
+                validation_status=self.validation_status.value,
+            )
 
         period = parse_period(self.observation_period, self.frequency)
         object.__setattr__(self, "_period_cache", period)

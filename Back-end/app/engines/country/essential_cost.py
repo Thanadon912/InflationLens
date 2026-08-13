@@ -23,7 +23,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "essential_cost_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,8 @@ class EssentialBasketConfig:
     version: str
     methodology: str
     categories: Mapping[str, float]
-    min_coverage_percent: float = 0.0
+    min_coverage_percent: float
+    structurally_dominant_weight: float
 
 
 def calculate_from_rates(
@@ -79,6 +80,12 @@ def calculate_from_rates(
         available_weight = sum(config.categories[k] for k in provided)
         coverage_pct = (available_weight / total_weight) * 100 if total_weight > 0 else 0.0
         check_coverage_threshold(coverage_pct, config.min_coverage_percent, context=INDICATOR_ID)
+        if max((config.categories[k] for k in missing), default=0.0) >= config.structurally_dominant_weight:
+            from app.engines.shared.errors import CoverageThresholdError
+            raise CoverageThresholdError(
+                f"{INDICATOR_ID}: a structurally dominant category is missing",
+                missing_categories=sorted(missing),
+            )
         weights = renormalize_weights(config.categories, provided)
         warnings.append(
             f"{INDICATOR_ID}: categories missing from input, weights renormalized: "

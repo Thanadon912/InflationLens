@@ -4,7 +4,7 @@ CALCULATION_ENGINE_GUIDELINES.md section 19 and COUNTRY/GLOBAL guidelines
 sections 16/19 all define the same two-step construction: standardize a
 value against a historical window, then take a weighted sum of z-scores.
 The result is a *score*, not an inflation rate (ENGINE guidelines section
-19: "Composite scores... must not be called 'True Inflation'"), which is
+19 prohibits presenting a composite as an objectively true rate), which is
 why every score-producing engine function must set
 ``Component.is_score=True`` and ``unit=Unit.STANDARD_DEVIATION_SCORE`` on
 its output (enforced by ``Component.__post_init__``).

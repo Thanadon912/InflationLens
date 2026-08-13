@@ -51,6 +51,8 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(ConfigError)
     def handle_config_error(exc: ConfigError):
+        if str(exc).startswith("No country profile configured"):
+            return _error_response(404, "GEOGRAPHY_NOT_FOUND", str(exc), {})
         logger.error("Configuration error: %s", exc)
         return _error_response(500, "CONFIG_ERROR", "Server configuration error", {})
 

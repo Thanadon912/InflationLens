@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.engines.shared.aggregation import (
+    chain_step,
     weighted_arithmetic_mean,
     weighted_geometric_price_relative,
 )
@@ -23,7 +24,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_consumer_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 DEFAULT_WEIGHT_METHOD = "household_consumption_ppp"
 
 
@@ -36,6 +37,8 @@ def calculate(
     calculated_at: str,
     weight_method: str = DEFAULT_WEIGHT_METHOD,
     country_price_relatives: Mapping[str, float] | None = None,
+    global_index_previous_period: float | None = None,
+    global_index_prior_year: float | None = None,
     population_by_geo: Mapping[str, float] | None = None,
     gdp_ppp_by_geo: Mapping[str, float] | None = None,
     consumption_ppp_by_geo: Mapping[str, float] | None = None,
@@ -70,6 +73,12 @@ def calculate(
                 unit=Unit.PERCENT_MOM,
             )
         )
+        if global_index_previous_period is not None:
+            global_index = chain_step(global_index_previous_period, geometric_relative)
+            components.append(Component(key="geometric_global_index", label="Geometric Chain-Linked Global CPI", value=global_index, unit=Unit.INDEX))
+            if global_index_prior_year is not None:
+                from app.engines.shared.growth import year_over_year
+                components.append(Component(key="geometric_yoy", label="Geometric Global Consumer Inflation (YoY)", value=year_over_year(global_index, global_index_prior_year), unit=Unit.PERCENT_YOY))
 
     coverage_report = build_coverage_report(
         all_geographies=all_geographies,

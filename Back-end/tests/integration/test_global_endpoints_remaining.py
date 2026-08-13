@@ -32,7 +32,7 @@ class TestGlobalExcessMoneyEndpoint:
     def test_uses_default_method_from_config(self, client):
         body = {
             "all_geographies": ["USA", "EA"],
-            "period": "2026-06",
+            "period": "2026-Q2",
             "global_money_expansion_percent": 7.0,
             "global_real_gdp_growth_percent": 2.5,
         }
@@ -42,7 +42,7 @@ class TestGlobalExcessMoneyEndpoint:
         assert data["metadata"]["selected_method"] == "aggregate_first"
         assert data["value"] == 4.5
 
-    def test_explicit_method_override(self, client):
+    def test_request_cannot_override_configured_method(self, client):
         body = {
             "method": "country_first",
             "all_geographies": ["USA", "EA"],
@@ -52,8 +52,7 @@ class TestGlobalExcessMoneyEndpoint:
             "country_weights": {"USA": 0.5, "EA": 0.5},
         }
         r = client.post("/api/v1/global/global_excess_money_growth", json=body)
-        assert r.status_code == 200
-        assert r.get_json()["metadata"]["selected_method"] == "country_first"
+        assert r.status_code == 400
 
 
 class TestGlobalProducerPressureEndpoint:

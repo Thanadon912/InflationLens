@@ -55,13 +55,21 @@ def build_provenance(*observations: Observation) -> tuple[InputProvenance, ...]:
     ``[{"provider": "bls", "series_id": "CUUR0000SA0"}]``.
     """
 
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str | None]] = set()
     result: list[InputProvenance] = []
     for obs in observations:
-        key = (obs.provider, obs.source_series_id)
+        key = (obs.provider, obs.source_series_id, obs.data_vintage)
         if key not in seen:
             seen.add(key)
-            result.append(InputProvenance(provider=obs.provider, series_id=obs.source_series_id))
+            result.append(
+                InputProvenance(
+                    provider=obs.provider,
+                    series_id=obs.source_series_id,
+                    source_url=obs.source_url,
+                    data_vintage=obs.data_vintage,
+                    retrieved_at=obs.retrieved_at,
+                )
+            )
     return tuple(result)
 
 

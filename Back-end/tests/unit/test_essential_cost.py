@@ -17,7 +17,13 @@ CATEGORIES = {
 
 
 def cfg(**overrides):
-    defaults = dict(version="2026.1", methodology="lower_income_expenditure_weights", categories=CATEGORIES)
+    defaults = dict(
+        version="2026.1",
+        methodology="lower_income_expenditure_weights",
+        categories=CATEGORIES,
+        min_coverage_percent=80.0,
+        structurally_dominant_weight=0.20,
+    )
     defaults.update(overrides)
     return ec.EssentialBasketConfig(**defaults)
 

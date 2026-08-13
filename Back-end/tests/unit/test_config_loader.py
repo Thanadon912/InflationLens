@@ -46,7 +46,7 @@ class TestBundledConfigFiles:
         assert len(versions["country"]) == 10
         assert len(versions["global"]) == 8
         for v in {**versions["country"], **versions["global"]}.values():
-            assert v == "1.0.0"
+            assert v == "1.0.1"
 
     def test_global_weights_has_coverage_thresholds(self):
         weights = load_global_weights()
@@ -54,6 +54,7 @@ class TestBundledConfigFiles:
         assert thresholds["consumption_ppp_minimum_percent"] == 85.0
         assert thresholds["gdp_ppp_minimum_percent"] == 85.0
         assert thresholds["population_minimum_percent"] == 80.0
+        assert thresholds["structurally_dominant_missing_weight"] == 0.20
 
     def test_usa_country_profile_loads(self):
         profile = load_country_profile("USA")
@@ -87,6 +88,7 @@ class TestBundledConfigFiles:
             profile = load_country_profile(geo)
             weights = profile["essential_basket"]["categories"].values()
             assert sum(weights) == pytest.approx(1.0), geo
+            assert profile["essential_basket"]["structurally_dominant_weight"] == 0.20
 
     def test_all_producer_import_weights_sum_to_one(self):
         for geo in ("USA", "EA", "THA"):

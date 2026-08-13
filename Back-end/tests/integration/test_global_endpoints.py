@@ -7,11 +7,8 @@ class TestGlobalConsumerEndpoint:
             "period": "2026-06",
         }
         r = client.post("/api/v1/global/global_consumer_inflation", json=body)
-        assert r.status_code == 200
-        data = r.get_json()
-        assert data["geography"] == "GLOBAL"
-        assert data["coverage"] == "partial"
-        assert data["coverage_report"]["missing_geographies"] == ["THA"]
+        assert r.status_code == 422
+        assert r.get_json()["error"]["code"] == "COVERAGE_THRESHOLD"
 
     def test_invalid_weights_returns_422(self, client):
         body = {

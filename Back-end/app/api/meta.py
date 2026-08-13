@@ -8,6 +8,7 @@ captures, what it misses) without hard-coding indicator lists client-side.
 from __future__ import annotations
 
 from flask import Blueprint, jsonify
+from app.api.contracts import contract_metadata
 
 from app.config.loader import (
     available_country_profiles,
@@ -27,7 +28,11 @@ def health():
 
 @meta_bp.get("/meta/indicators")
 def indicators():
-    return jsonify(load_indicator_registry())
+    registry = load_indicator_registry()
+    for scope in ("country", "global"):
+        for indicator_id, definition in registry[scope].items():
+            definition["api_contract"] = contract_metadata(indicator_id)
+    return jsonify(registry)
 
 
 @meta_bp.get("/meta/methodology")

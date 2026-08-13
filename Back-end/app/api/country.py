@@ -70,6 +70,8 @@ def _handle_essential_cost(geo: str, body: dict, profile: dict) -> IndicatorResu
         version=basket["version"],
         methodology=basket["methodology"],
         categories=basket["categories"],
+        min_coverage_percent=float(basket.get("min_coverage_percent", 80.0)),
+        structurally_dominant_weight=float(basket["structurally_dominant_weight"]),
     )
     return essential_cost.calculate_from_rates(
         get_mapping(body, "category_rates"),
@@ -101,6 +103,7 @@ def _handle_fixed_lifestyle(geo: str, body: dict, profile: dict) -> IndicatorRes
         package_sizes_base=get_mapping(body, "package_sizes_base", required=False),
         replacements=replacements or None,
         quality_adjustment_factors=get_mapping(body, "quality_adjustment_factors", required=False),
+        quality_adjusted_prices_current=get_mapping(body, "quality_adjusted_prices_current", required=False),
     )
 
 

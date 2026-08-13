@@ -21,7 +21,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "excess_money_growth"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 
 def calculate(

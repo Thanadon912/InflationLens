@@ -6,7 +6,7 @@
 # here per COUNTRY guidelines section 5.2's hierarchy (official core ->
 # weighted median -> trimmed mean -> model-based).
 country: EA
-profile_version: "1.0.0"
+profile_version: "1.1.0"
 
 headline_consumer:
   source_indicator: headline_consumer_inflation
@@ -24,6 +24,8 @@ underlying:
     excluded_categories: [food, energy]
 
 essential_basket:
+  min_coverage_percent: 80.0
+  structurally_dominant_weight: 0.20
   version: "2026.1"
   methodology: lower_income_expenditure_weights
   categories:
@@ -70,4 +72,4 @@ purchasing_power:
   income_definition: gross
   wage_measure: mean
 
-methodology_version: "1.0.0"
+methodology_version: "1.0.1"

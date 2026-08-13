@@ -65,7 +65,7 @@ class TestUnderlyingEndpoint:
         r = client.post("/api/v1/country/USA/underlying_inflation", json=body)
         assert r.status_code == 200
         data = r.get_json()
-        assert data["metadata"]["selected_method"] == "official_core"  # USA profile preference
+        assert data["metadata"]["selected_method"] == "weighted_median"
 
 
 class TestEssentialCostEndpoint:

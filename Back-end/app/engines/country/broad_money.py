@@ -13,6 +13,7 @@ consumer-price inflation rate -- COUNTRY guidelines section 9.8: "Use
 from __future__ import annotations
 
 from app.engines.shared.growth import year_over_year
+from app.engines.shared.errors import DataQualityError
 from app.engines.shared.quality import derive_confidence
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
@@ -20,7 +21,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "broad_money_expansion"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 LABEL = "Broad Money Expansion"
 
 
@@ -52,6 +53,8 @@ def calculate(
     warnings: list[str] = []
 
     if population_current is not None and population_prior_year is not None:
+        if population_current <= 0 or population_prior_year <= 0:
+            raise DataQualityError("Population levels must be positive for per-capita money growth")
         per_capita_current = money_current / population_current
         per_capita_prior = money_prior_year / population_prior_year
         per_capita_growth = year_over_year(per_capita_current, per_capita_prior)
@@ -67,6 +70,8 @@ def calculate(
         warnings.append(f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)")
 
     if real_gdp_current is not None and real_gdp_prior_year is not None:
+        if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
+            raise DataQualityError("Real GDP levels must be positive for money/output calculations")
         ratio_current = money_current / real_gdp_current
         components.append(
             Component(

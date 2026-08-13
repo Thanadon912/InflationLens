@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 
 from app.engines.shared.errors import DataQualityError, InvalidWeightError
 from app.engines.shared.validation import DEFAULT_WEIGHT_TOLERANCE, validate_weights
@@ -52,7 +53,9 @@ def weighted_arithmetic_mean(
 
     _check_matching_keys(values, weights, context="weighted_arithmetic_mean")
     validate_weights(weights, tolerance=tolerance, context="weighted_arithmetic_mean")
-    return sum(values[k] * weights[k] for k in values)
+    # Decimal protects weight normalization/aggregation from binary-float
+    # drift; the public numeric contract remains float at this boundary.
+    return float(sum(Decimal(str(values[k])) * Decimal(str(weights[k])) for k in sorted(values)))
 
 
 def weighted_geometric_mean_rates(
@@ -339,7 +342,7 @@ def chain_step(previous_level: float, period_relative: float) -> float:
         raise DataQualityError(
             f"chain_step: period relative must be positive, got {period_relative}"
         )
-    return previous_level * period_relative
+    return float(Decimal(str(previous_level)) * Decimal(str(period_relative)))
 
 
 def chain_linked_index(period_relatives: Sequence[float], *, base: float = 100.0) -> list[float]:

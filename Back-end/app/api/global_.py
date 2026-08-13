@@ -47,6 +47,8 @@ def _handle_consumer(body: dict, global_cfg: dict) -> IndicatorResult:
         calculated_at=now_iso(),
         weight_method=get_str(body, "weight_method", required=False, default=global_cfg["default_weight_method"]),
         country_price_relatives=get_mapping(body, "country_price_relatives", required=False),
+        global_index_previous_period=get_float(body, "global_index_previous_period", required=False),
+        global_index_prior_year=get_float(body, "global_index_prior_year", required=False),
         population_by_geo=get_mapping(body, "population_by_geo", required=False),
         gdp_ppp_by_geo=get_mapping(body, "gdp_ppp_by_geo", required=False),
         consumption_ppp_by_geo=get_mapping(body, "consumption_ppp_by_geo", required=False),

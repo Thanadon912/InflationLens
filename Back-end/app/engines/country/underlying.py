@@ -29,7 +29,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "underlying_inflation"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 
 _METHOD_KEYS = {
     "weighted_median": "weighted_median_value",

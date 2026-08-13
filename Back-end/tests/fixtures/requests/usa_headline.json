@@ -1,0 +1,20 @@
+{
+  "period": "2026-06",
+  "inputs": {
+    "all_items_cpi_index": [
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-06","value":100.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-07","value":101.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-08","value":102.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-09","value":103.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-10","value":104.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-11","value":105.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2025-12","value":106.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-01","value":107.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-02","value":108.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-03","value":109.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-04","value":110.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-05","value":111.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"},
+      {"provider":"official-test","source_series_id":"CPI","indicator_id":"headline_consumer_inflation","geography":"USA","frequency":"monthly","unit":"index","observation_period":"2026-06","value":112.0,"retrieved_at":"2026-08-01T00:00:00Z","validation_status":"validated"}
+    ]
+  }
+}

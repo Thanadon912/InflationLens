@@ -21,7 +21,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_excess_money_growth"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 SUPPORTED_METHODS = ("aggregate_first", "country_first")
 
 

@@ -134,12 +134,12 @@ class TestQualityAdjustment:
         adjusted = next(c for c in result.components if c.key == "fli_quality_adjusted")
         assert raw.value == pytest.approx(adjusted.value)
 
-    def test_adjustment_factor_changes_quality_adjusted_view_only(self):
+    def test_explicit_adjusted_prices_change_quality_adjusted_view_only(self):
         result = fl.calculate(
             prices_current=BASE_PRICES, prices_prior_year=BASE_PRICES,
             prices_base=BASE_PRICES, quantities_base=BASE_QTY, config=cfg(),
             geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
-            quality_adjustment_factors={"steak": 0.9},
+            quality_adjusted_prices_current={"rice": 10.0, "steak": 18.0},
         )
         raw = next(c for c in result.components if c.key == "fixed_basket_index")
         adjusted = next(c for c in result.components if c.key == "fli_quality_adjusted")

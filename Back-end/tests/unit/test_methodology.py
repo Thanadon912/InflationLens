@@ -6,7 +6,10 @@ from app.models.methodology import InputProvenance, MethodologyVersion
 class TestInputProvenance:
     def test_to_dict(self):
         p = InputProvenance(provider="bls", series_id="CUUR0000SA0")
-        assert p.to_dict() == {"provider": "bls", "series_id": "CUUR0000SA0"}
+        assert p.to_dict() == {
+            "provider": "bls", "series_id": "CUUR0000SA0",
+            "source_url": None, "data_vintage": None, "retrieved_at": None,
+        }
 
 
 class TestMethodologyVersion:

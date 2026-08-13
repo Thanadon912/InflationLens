@@ -29,7 +29,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_inflation_synchronization"
-METHODOLOGY_VERSION = "1.0.0"
+METHODOLOGY_VERSION = "1.0.1"
 COMMON_FACTOR_MODEL_VERSION = "unavailable-v1"
 
 
@@ -53,6 +53,8 @@ def calculate(
 ) -> IndicatorResult:
     values = list(country_rates_current.values())
     count = len(values)
+    if count == 0:
+        raise DataQualityError("global_inflation_synchronization requires at least one country")
 
     share_above = (sum(1 for v in values if v > threshold_percent) / count) * 100
 
@@ -125,8 +127,10 @@ def calculate(
                 raise DataQualityError("standardization window requires at least 2 historical values")
             mu, sigma = historical_mean_std(dispersion_standardization_window)
             z_dispersion = z_score(dispersion, mu, sigma)
+            # GLOBAL section 12.7 subtracts dispersion: synchronization is
+            # weaker, not stronger, when cross-country rates spread out.
             sync_score = composite_score(
-                {"share_accelerating": share_accelerating, "share_above_threshold": share_above, "dispersion": z_dispersion},
+                {"share_accelerating": share_accelerating, "share_above_threshold": share_above, "dispersion": -z_dispersion},
                 composite_weights,
             )
             components.append(
