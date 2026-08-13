@@ -1,0 +1,36 @@
+config_version: "source-registry-1.0.0"
+defaults:
+  monthly_backfill_periods: 24
+  quarterly_backfill_periods: 8
+  sync_stale_hours: 48
+  monthly_stale_days: 62
+  quarterly_stale_days: 150
+  metadata_stale_days: 30
+  cross_source_index_tolerance: 0.01
+
+sources:
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, provider: bls, series_id: CUUR0000SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: shadow_index, provider: fred, series_id: CPIAUCNS, frequency: monthly, unit: index, seasonally_adjusted: false, primary: false}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: food, provider: bls, series_id: CUUR0000SAF1, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: housing, provider: bls, series_id: CUUR0000SAH1, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: energy, provider: bls, series_id: CUUR0000SA0E, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: transport, provider: bls, series_id: CUUR0000SAT, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: healthcare, provider: bls, series_id: CUUR0000SAM, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: communications, provider: bls, series_id: CUUR0000SAE2, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: broad_money_expansion, role: money_level, provider: fred, series_id: M2SL, frequency: monthly, unit: local_currency, currency: USD, seasonally_adjusted: true, primary: true}
+  - {geography: USA, indicator_id: economy_wide_inflation, role: nominal_gdp, provider: bea, series_id: "NIPA:T10105:1", dataset: NIPA, table: T10105, line: "1", frequency: quarterly, unit: local_currency, currency: USD, seasonally_adjusted: true, primary: true}
+  - {geography: USA, indicator_id: economy_wide_inflation, role: real_gdp, provider: bea, series_id: "NIPA:T10106:1", dataset: NIPA, table: T10106, line: "1", frequency: quarterly, unit: local_currency, currency: USD, seasonally_adjusted: true, primary: true}
+
+  - {geography: EA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:TOTAL:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: TOTAL, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: food, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP01:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP01, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: housing, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP041:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP041, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: energy, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:NRG:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: NRG, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: transport, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP07:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP07, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: healthcare, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP06:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP06, geo: EA20}}
+  - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: communications, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP08:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP08, geo: EA20}}
+  - {geography: EA, indicator_id: broad_money_expansion, role: money_level, provider: ecb, dataflow: BSI, series_id: "M.U2.Y.V.M30.X.1.U2.2300.Z01.E", frequency: monthly, unit: local_currency, currency: EUR, seasonally_adjusted: true, primary: true}
+  - {geography: EA, indicator_id: economy_wide_inflation, role: nominal_gdp, provider: eurostat, dataset: namq_10_gdp, series_id: "namq_10_gdp:Q:CP_MEUR:SCA:B1GQ:EA20", frequency: quarterly, unit: local_currency, currency: EUR, seasonally_adjusted: true, primary: true, filters: {freq: Q, unit: CP_MEUR, s_adj: SCA, na_item: B1GQ, geo: EA20}}
+  - {geography: EA, indicator_id: economy_wide_inflation, role: real_gdp, provider: eurostat, dataset: namq_10_gdp, series_id: "namq_10_gdp:Q:CLV20_MEUR:SCA:B1GQ:EA20", frequency: quarterly, unit: local_currency, currency: EUR, seasonally_adjusted: true, primary: true, filters: {freq: Q, unit: CLV20_MEUR, s_adj: SCA, na_item: B1GQ, geo: EA20}}
+
+  - {geography: USA, indicator_id: geography_metadata, role: population, provider: world_bank, series_id: SP.POP.TOTL, frequency: annual, unit: persons, primary: true}
+  - {geography: EA, indicator_id: geography_metadata, role: population, provider: world_bank, series_id: SP.POP.TOTL, provider_geography: EMU, frequency: annual, unit: persons, primary: true}

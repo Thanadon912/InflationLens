@@ -35,6 +35,6 @@ def log_calculation(result: IndicatorResult) -> None:
         "warnings": list(result.warnings),
         "output": result.value,
         "calculated_at": result.calculated_at,
-        "software_version": "0.2.0",
+        "software_version": "0.3.0",
         "git_commit": os.environ.get("GIT_COMMIT", "unknown"),
     }, sort_keys=True))

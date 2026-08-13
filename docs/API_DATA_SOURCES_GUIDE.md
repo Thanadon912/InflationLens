@@ -1062,7 +1062,11 @@ EA:
   headline_consumer_inflation:
     primary:
       provider: eurostat
-      dataset: prc_hicp_midx
+      dataset: prc_hicp_minr
+      filters:
+        unit: I25
+        coicop18: TOTAL
+        geo: EA20
     fallback:
       provider: imf
       dataset_id: CPI
@@ -1088,6 +1092,8 @@ Store:
 - primary/fallback role
 - validation status
 - last review date
+
+Implementation note (verified 2026-08-13): Eurostat discontinued the previously documented `prc_hicp_midx` mapping. InflationLens uses `prc_hicp_minr`, the `coicop18` classification, and the 2025 index base (`I25`). The executable, reviewed registry is `Back-end/app/config/source_registry.yaml`; the data-fetch CLI, immutable SQLite snapshots, and cached GET API are implemented for four USA and four EA country lenses.
 
 ---
 

@@ -1,13 +1,13 @@
 # Multi-Dimensional Inflation Engine
 
-Deterministic Python/Flask back end for ten country and eight global inflation lenses. It intentionally does not fetch data: provider adapters, persistence, caching and the React front end are separate phases.
+Deterministic Python/Flask back end for ten country and eight global inflation lenses. The calculation API accepts normalized observations for every implemented lens. A production-oriented ingestion layer also fetches four core lenses for the United States and euro area from official providers, preserves their lineage in SQLite, and serves calculated snapshots without making provider calls during web requests.
 
 ## Install and verify
 
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/python -m pytest -q --cov=app --cov-report=term-missing --cov-fail-under=95
+.venv/bin/python -m pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=95
 ```
 
 Run locally:
@@ -21,9 +21,43 @@ A ready-to-run headline request is available at
 
 All routes are under `/api/v1`. Metadata is available at `/meta/indicators`, `/meta/methodology`, `/meta/global-weights`, and `/meta/countries`.
 
+## Official data ingestion
+
+Copy `.env.example` to `.env`, then set `FRED_API_KEY` and `BEA_API_KEY`. BLS, Eurostat, ECB, and World Bank do not require a key for the configured endpoints. Provider access is CLI-only: Flask GET routes read cached SQLite snapshots and therefore remain deterministic even when a provider is slow or unavailable.
+
+```bash
+# Fetch all configured USA and euro-area series, calculate every complete period,
+# and persist raw payloads, normalized observations, revisions, and results.
+.venv/bin/flask --app app data sync
+
+# Narrow refreshes are useful during development or incident recovery.
+.venv/bin/flask --app app data sync --geography USA --indicator headline_consumer_inflation
+
+# Fetch and validate without writing data, or inspect the last stored run.
+.venv/bin/flask --app app data verify --geography EA --indicator broad_money_expansion
+.venv/bin/flask --app app data status
+```
+
+`data sync` exits 0 on success, 2 on a partial run, and 1 when every requested integration failed. Each provider has bounded retry/backoff for transient HTTP failures; a provider failure is recorded and does not discard successful provider data. Estimated or provisional observations remain usable but are explicitly marked and lower result confidence.
+
+The cached read API is:
+
+```text
+GET /api/v1/country/{geography}/{indicator_id}?period=latest
+GET /api/v1/country/{geography}/dashboard?period=latest
+GET /api/v1/data/status
+GET /api/v1/data/issues?run_id={optional-run-id}
+GET /api/v1/data/lineage/{snapshot-id}
+GET /api/v1/meta/data-sources
+```
+
+Configured cached indicators are `headline_consumer_inflation`, `essential_cost_inflation`, `broad_money_expansion`, and `economy_wide_inflation` for `USA` and `EA`. The same country-indicator URL continues to accept `POST` for caller-supplied normalized observations. SQLite defaults to `instance/inflation_lens.sqlite3`; override it with `INFLATION_DB_PATH`. Database files and secrets are ignored by Git.
+
+The source mapping is declarative in `app/config/source_registry.yaml`. See [docs/DATA_INTEGRATION.md](docs/DATA_INTEGRATION.md) for provider behavior, storage lineage, and known data limitations.
+
 ## Strict calculation contract
 
-Version `0.2.0` accepts normalized observations only. Anonymous numeric fields are rejected. A country request has this shape:
+Version `0.3.0` accepts normalized observations only. Anonymous numeric fields are rejected. A country request has this shape:
 
 ```json
 {

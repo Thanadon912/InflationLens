@@ -78,6 +78,10 @@ def load_global_weights() -> dict:
     return load_yaml(CONFIG_DIR / "global_weights.yaml")
 
 
+def load_source_registry() -> dict:
+    return load_yaml(CONFIG_DIR / "source_registry.yaml")
+
+
 def load_country_profile(geography: str) -> dict:
     path = CONFIG_DIR / "country_profiles" / f"{geography.upper()}.yaml"
     try:

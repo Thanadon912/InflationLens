@@ -17,8 +17,10 @@ from flask import Flask
 from flask_cors import CORS
 
 from app.api.blueprint import calculate_bp
+from app.api.data import data_bp
 from app.api.errors import register_error_handlers
 from app.api.meta import meta_bp
+from app.data.cli import register_data_cli
 
 # Reject request bodies above this size outright, before any JSON parsing
 # or engine work happens (defense against oversized/malicious payloads).
@@ -34,10 +36,17 @@ def create_app() -> Flask:
     CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in allowed_origins.split(",") if o.strip()]}})
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    # httpx logs full request URLs at INFO, which can include provider API
+    # keys in query parameters. Provider failures are logged by our own
+    # sanitized integration layer instead.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     app.register_blueprint(meta_bp, url_prefix="/api/v1")
     app.register_blueprint(calculate_bp, url_prefix="/api/v1")
+    app.register_blueprint(data_bp, url_prefix="/api/v1")
 
     register_error_handlers(app)
+    register_data_cli(app)
 
     return app

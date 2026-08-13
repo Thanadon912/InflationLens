@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "inflation-engine"
-version = "0.2.0"
+version = "0.3.0"
 description = "Deterministic multi-dimensional inflation calculation engine and Flask API"
 requires-python = ">=3.10"
 dependencies = [
     "flask>=3.0",
     "pyyaml>=6.0",
     "flask-cors>=4.0",
+    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +27,7 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = ["live: read-only tests against official provider APIs"]
 
 [tool.coverage.run]
 branch = true

@@ -9,6 +9,8 @@ coverage.xml
 htmlcov/
 dist/
 build/
+instance/
+*.sqlite3
 .env
 .env.*
 !.env.example

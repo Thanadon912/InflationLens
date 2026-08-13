@@ -52,10 +52,11 @@ Current mismatch count: **0** for implemented v1 formulas. Explicitly out-of-sco
 
 Last verified on 2026-08-13 (Python 3.14.6):
 
-- Full suite with branch coverage: 540 passed; `app/` coverage 95.12%.
+- Full suite with branch coverage: 556 passed; `app/` coverage 95.66%.
 - Property invariants: 13 passed.
 - One fixed expected-output snapshot per indicator: 18 passed at absolute tolerance `1e-9`.
 - Engine purity gates: 3 passed (network/database/config I/O, prohibited product labels, and hard-coded policy-weight mappings/defaults).
-- Live Flask smoke: health, indicator metadata, and normalized USA headline calculation all returned HTTP 200; headline fixture returned 12.0% YoY.
+- Live Flask smoke: health, indicator metadata, normalized USA headline calculation, both cached dashboards, data status, and data-source metadata returned HTTP 200; headline fixture returned 12.0% YoY.
+- Live provider verification: all eight configured USA/EA country-lens mappings successfully fetched, normalized, calculated, persisted, and served from cache using BLS, FRED, BEA, Eurostat, and ECB. World Bank pagination is adapter-tested and registered for geography metadata but is not yet consumed by these four country formulas.
 
-The verification pass found and corrected three material failure modes in the inherited implementation: synchronization had added standardized dispersion instead of subtracting it; rejected observations could reach calculation; and empty synchronization/zero population inputs could escape as HTTP 500 errors. Regression and strict-contract tests now protect each correction.
+The verification passes found and corrected five material failure modes: synchronization had added standardized dispersion instead of subtracting it; rejected observations could reach calculation; empty synchronization/zero population inputs could escape as HTTP 500 errors; BLS missing-value markers could be mistaken for zero; and the BEA backfill request could omit intermediate years. Regression, strict-contract, provider-contract, and end-to-end persistence tests now protect these corrections.
