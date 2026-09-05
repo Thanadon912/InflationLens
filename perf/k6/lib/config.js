@@ -38,18 +38,42 @@ export function post(path, body, name, extraTags = {}) {
  * payload, and faster than a real one. Checking only `status === 200`
  * would report that as an excellent result. `body` receives the parsed
  * JSON, or null when the response was not parseable JSON.
+ *
+ * `expectStatus` exists for the abuse scenario, where the correct answer
+ * is a 4xx: a request that is *supposed* to be refused and comes back 200
+ * is as much a failure as a page load that comes back 500. It defaults to
+ * 200, so every existing caller is unaffected.
  */
-export function verify(res, name, assertions) {
+export function verify(res, name, assertions, expectStatus = 200) {
   let body = null;
   try {
     body = res.json();
   } catch (_) {
     body = null;
   }
-  const checks = { [`${name}: status 200`]: (r) => r.status === 200 };
+  const checks = { [`${name}: status ${expectStatus}`]: (r) => r.status === expectStatus };
   for (const [label, predicate] of Object.entries(assertions)) {
     checks[`${name}: ${label}`] = () => body !== null && predicate(body);
   }
   check(res, checks, { name });
   return body;
+}
+
+/* A request the API is meant to refuse.
+ *
+ * Two things separate this from `get`/`post`. It carries `kind: 'reject'`
+ * so the refusal path gets its own threshold and its own rows in the
+ * dashboard's per-endpoint table, rather than dragging down the read and
+ * calc percentiles it has nothing to do with. And it overrides k6's
+ * response callback, which by default counts anything outside 2xx-3xx as
+ * a failed request: without that override a scenario built entirely from
+ * deliberate 4xx responses would trip the `http_req_failed` threshold
+ * while the API was behaving exactly as designed.
+ */
+export function reject(method, path, expectStatus, name, body = null, headers = {}) {
+  return http.request(method, `${BASE_URL}${path}`, body, {
+    tags: { name, kind: 'reject' },
+    headers,
+    responseCallback: http.expectedStatuses(expectStatus),
+  });
 }

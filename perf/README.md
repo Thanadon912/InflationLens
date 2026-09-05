@@ -41,9 +41,18 @@ API, and stops it again afterwards.
 | `run.sh stress` | 9m | Where does it break? Steps 20 → 200 users until latency gives way. Measured: throughput tops out at **~700 req/s around 70 users**; beyond that, latency alone degrades. |
 | `run.sh spike` | 4m | Does it recover? Jumps to 200 users for 30s, then watches the two minutes after. Measured: **yes, immediately.** |
 | `run.sh calculate` | 3m | How much can the calculation engines take? Drives the POST endpoints at a fixed arrival rate — 200/s by default, `RATE=400 ./perf/scripts/run.sh calculate` to push further. |
+| `run.sh abuse` | 2.5m | What does it cost to say *no*? Mixes refused requests — 404s, schema errors, malformed JSON, bodies over the 2 MiB cap — into a normal page-load stream. Measured: refusing costs about **a tenth** of serving. |
 
 Options: `--no-prom` (HTML report only, no Docker needed), `--reseed` (rebuild
 the test database), `--keep-server` (leave gunicorn up afterwards).
+
+`abuse` takes three of its own, all there to make it a controlled experiment
+rather than a single number: `TAIL=` chooses what follows each page load
+(`reject`, the default; `valid` for an ordinary request instead; `none` for the
+page load alone), `OVERSIZE_RATE=` how often the refused request is the 2 MiB
+one (default `0.1`), and `VUS=` the user count (default `20`). `TAIL=valid` is
+the control that matters — it holds the request count and shape identical and
+changes only whether the extra request is refused.
 
 `WORKERS=` and `THREADS=` set gunicorn's concurrency (default `4` and `4`).
 Holding a scenario fixed and changing only these is how a throughput ceiling
@@ -55,8 +64,9 @@ which pool you used when reporting numbers; the dashboard records it as a
 
 **A `FAIL` on `stress` or `spike` is the expected result**, not a regression —
 those runs exist to push the API past its ceiling, and both breach the latency
-SLO by design. Read the curve, not the verdict tile. `load` is the scenario
-whose verdict means something.
+SLO by design. Read the curve, not the verdict tile. `load` and `abuse` are the
+scenarios whose verdicts mean something: both are calibrated to run below
+saturation and both are expected to pass.
 
 ---
 
@@ -146,6 +156,13 @@ This matters because a misconfigured or unseeded cache still answers `200` — w
 an empty payload, faster than a real one. Checking only the status code would
 report that as an excellent result.
 
+**Only `abuse` sends requests the API should refuse.** Every other scenario
+sends exclusively well-formed traffic, which leaves the entire rejection path —
+the one hostile traffic drives — unmeasured. Its cases are asserted on the
+structured error envelope from `app/api/errors.py`, not merely on status code:
+a stack trace, an empty body or a proxy error page would all arrive with the
+right status and the wrong contents.
+
 **The API is served by gunicorn**, not `flask run`. Flask's development server
 is explicitly not built for concurrency; measuring it under load would measure
 the dev server rather than this API.
@@ -170,8 +187,9 @@ developer machine. Reproduce with `./perf/scripts/run.sh load` and
 | `calculate` — 200 req/s, 3m | 36,002 requests, **0 failures**. Blended calc p95 **15 ms**, and k6 needed at most **4 VUs** to sustain the rate. |
 | `stress` — 0→200 VUs, 9m | 303,343 requests, **0 failures**, 831,456 checks all passing. Throughput ceiling **~700 req/s**, reached at **~70 VUs**. Read p95 **49 ms → 1,327 ms** past that point. |
 | `spike` — 5→200→5 VUs, 3m50s | 44,077 requests, **0 failures**. Surge absorbed at **789 req/s**; **recovery is immediate** — the quiet tail delivers 56–58 req/s against a 57–59 req/s opening baseline. |
+| `abuse` — 20 VUs, 2.5m | 9,948 requests, **0 failures**, 26,645 checks all passing. Refused requests cost **p95 1.18 ms** against the same run's read **p95 10.04 ms**. |
 
-Four things worth recording:
+Five things worth recording:
 
 **The calculation engines are not the bottleneck.** 200 requests/second of real
 engine work — including `POST /global/dashboard`, which computes all eight
@@ -216,10 +234,50 @@ the time is spent *waiting for a worker*, not doing the work. And `GET /health`
 degrades in lockstep with everything else, so the queue is in front of the
 application, not inside any one handler.
 
-Two things this deliberately does **not** establish. The scenarios are read-heavy
+**Refusing a request is cheap, and refused traffic is not an amplifier.** This
+is the question `abuse` exists to answer, and it matters because the API has no
+rate limiting (README.md: open by design) and a fixed worker pool: anything
+that costs more to refuse than to serve would let an attacker fill that pool
+with less effort than a real user does. It does not. Every refusal is cheaper
+than every read, in the same run and the same seconds:
+
+| Request | p95 | Server think time (p95) |
+|---|---|---|
+| `GET /measures/{geo}` | 12.64 ms | 12.50 ms |
+| `GET /world/cross-section` | 11.60 ms | 11.50 ms |
+| *— refusals below —* | | |
+| `POST …` body over 2 MiB → 413 | 1.79 ms | **0.91 ms** |
+| `GET /measures/{geo}?window=…` → 400 | 1.34 ms | 1.26 ms |
+| `POST …` malformed JSON → 400 | 1.33 ms | 1.25 ms |
+| `GET /measures/ZZZ` → 404 | 1.25 ms | 1.17 ms |
+
+Measured uncontended too, one request at a time: refusals take 0.5–0.8 ms
+against 1.7–4.4 ms for reads. The 2 MiB case is the one to look at twice — its
+*duration* is the highest of the refusals because the client has to push the
+bytes, but its **think time is the lowest of all**, which is precisely what
+`MAX_CONTENT_LENGTH` in `app/factory.py` is for: the body is rejected on its
+declared length, before anything parses it.
+
+The control is what makes this a finding rather than a coincidence.
+`TAIL=valid ./perf/scripts/run.sh abuse` reruns the identical harness with an
+ordinary request substituted for the refused one, and read latency does not
+meaningfully move (p95 11.03 ms vs 12.12 ms). Swapping abuse for legitimate
+traffic buys an attacker nothing.
+
+None of which makes `abuse` a security test. It measures the *cost* of a
+refusal, not the API's ability to survive someone determined to send them: with
+no rate limiting in front of it, one client can still occupy the whole worker
+pool, exactly as `stress` shows a client can with valid traffic. The finding is
+narrower and still worth having — bad traffic is no cheaper to attack with than
+good traffic, so the ceiling `stress` measured is the ceiling either way.
+
+Three things this deliberately does **not** establish. The scenarios are read-heavy
 by construction, so the root `README.md`'s caution about SQLite under concurrent
 **write** load is untested here, not refuted — writes happen during
-`flask data sync`, which no scenario exercises. And `GET /regions/us` is an
+`flask data sync`, which no scenario exercises. Nothing here measures an
+endurance run either: the longest is nine minutes, which cannot surface a memory
+or file-descriptor leak, and no scenario starts against a cold cache. And
+`GET /regions/us` is an
 unexplained outlier (run p95 301 ms while its peers sit above 1,100 ms, despite
 identical request counts in the same batch); it is recorded rather than
 explained, and is worth a look before anyone leans on per-endpoint numbers from

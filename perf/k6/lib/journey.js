@@ -10,7 +10,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 
-import { BASE_URL, get, post, verify } from './config.js';
+import { BASE_URL, get, post, reject, verify } from './config.js';
 import { body, countryDashboardBody, globalDashboardBody } from './payloads.js';
 
 const WINDOWS = ['12m', '1m', '6m'];
@@ -141,6 +141,59 @@ export function calculateGlobalDashboard(contracts, opts) {
       b.indicators.length === expected &&
       b.indicators.every((i) => i.coverage !== 'unavailable'),
   });
+}
+
+/* Requests the API is supposed to refuse.
+ *
+ * Every other helper in this file sends a well-formed request, which
+ * leaves the whole refusal path unmeasured -- and the refusal path is the
+ * one an attacker drives. What matters is not that these return an error
+ * but *what they cost*: if rejecting a request is more expensive than
+ * serving a real one, then bad traffic is an amplifier, and an API with
+ * no rate limiting (README.md: open by design) has no second line of
+ * defence behind that.
+ *
+ * Each case is asserted on the structured error envelope
+ * (app/api/errors.py), not merely on the status code. A stack trace, an
+ * empty body, or a generic proxy error page would all arrive with the
+ * right status and the wrong contents.
+ *
+ * Statuses and codes here were read off the running API, not assumed.
+ */
+const REJECTIONS = [
+  { method: 'GET', path: '/measures/ZZZ', status: 404, code: 'DATA_SNAPSHOT_NOT_FOUND',
+    name: 'GET /measures/{geo} [unknown geo]' },
+  { method: 'GET', path: '/measures/USA?window=banana', status: 400, code: 'SCHEMA_ERROR',
+    name: 'GET /measures/{geo} [bad window]' },
+  { method: 'GET', path: '/country/USA/not_a_real_indicator', status: 404, code: 'DATA_SNAPSHOT_NOT_FOUND',
+    name: 'GET /country/{geo}/{indicator} [unknown indicator]' },
+  { method: 'POST', path: '/country/USA/fixed_lifestyle_inflation', status: 400, code: 'SCHEMA_ERROR',
+    body: '{"period": ', name: 'POST /country/{geo}/{indicator} [malformed JSON]' },
+  { method: 'POST', path: '/country/USA/no_such_indicator', status: 404, code: 'INDICATOR_NOT_FOUND',
+    body: '{"period":"2026-07","inputs":{}}', name: 'POST /country/{geo}/{indicator} [unknown indicator]' },
+];
+
+/* One oversized body, built once per VU rather than per iteration.
+ *
+ * app/factory.py caps request bodies at 2 MiB specifically to stop
+ * oversized payloads reaching the JSON parser, but nothing until now
+ * checked that the cap is actually cheaper than accepting the body would
+ * be. Just over the limit is the interesting size: comfortably rejected,
+ * while still making the client push the whole thing. */
+const OVERSIZED_BODY = `{"period":"2026-07","pad":"${'x'.repeat(2 * 1024 * 1024 + 1024)}"}`;
+
+export function malformedRequest() {
+  const c = REJECTIONS[Math.floor(Math.random() * REJECTIONS.length)];
+  const res = reject(c.method, c.path, c.status, c.name, c.body || null,
+    c.body ? { 'Content-Type': 'application/json' } : {});
+  verify(res, c.name, { 'structured error envelope': (b) => b.error && b.error.code === c.code }, c.status);
+}
+
+export function oversizedBody() {
+  const name = 'POST /country/{geo}/{indicator} [body over 2 MiB]';
+  const res = reject('POST', '/country/USA/fixed_lifestyle_inflation', 413, name,
+    OVERSIZED_BODY, { 'Content-Type': 'application/json' });
+  verify(res, name, { 'structured error envelope': (b) => b.error && b.error.code === 'HTTP_413' }, 413);
 }
 
 /* Cheap liveness probe, used by the spike scenario to tell "the server is

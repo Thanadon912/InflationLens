@@ -28,6 +28,14 @@ dev = [
 perf = [
     "gunicorn>=23.0",
 ]
+# Security scanning, run by .github/workflows/security.yml. Declared here
+# rather than pip-installed inside the workflow so the versions the gate
+# uses are visible in the project, and so the same scan can be reproduced
+# locally with `.venv/bin/pip install -e '.[security]'`.
+security = [
+    "pip-audit>=2.7",
+    "bandit>=1.7",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

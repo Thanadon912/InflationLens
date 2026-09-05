@@ -58,6 +58,23 @@ export const SLO = {
   // where this API struggles.
   calc: { p95: 40, p99: 120 },
 
+  // Refused requests (the `abuse` scenario): 404s, schema errors,
+  // malformed JSON, bodies over the 2 MiB cap.
+  //
+  // Deliberately the *same* budget as `read`, because that is the claim
+  // worth enforcing: refusing a request must never cost more than
+  // answering one. If it does, bad traffic amplifies -- and this API has
+  // no rate limiting to fall back on (README.md: open by design), so the
+  // threshold going red is the whole point of the scenario, not a number
+  // to relax.
+  //
+  // Judged on `http_req_waiting`, not `http_req_duration`. The oversized
+  // case makes the client push 2 MiB up the loopback, and that transfer
+  // lands in `duration` while having nothing to do with what the refusal
+  // costs the server. `waiting` is time-to-first-byte -- the server's own
+  // think time -- which is the figure the claim above is actually about.
+  reject: { p95: 25, p99: 60 },
+
   // Applies to every request in a run, regardless of kind.
   errorRate: 0.01, // under 1% of requests may fail
   checkRate: 0.99, // over 99% of content assertions must pass
@@ -83,5 +100,9 @@ export function thresholds() {
     checks: [`rate>${SLO.checkRate}`],
     'http_req_duration{kind:read}': [`p(95)<${SLO.read.p95}`, `p(99)<${SLO.read.p99}`],
     'http_req_duration{kind:calc}': [`p(95)<${SLO.calc.p95}`, `p(99)<${SLO.calc.p99}`],
+    // Only the abuse scenario emits `kind:reject`; k6 skips a threshold
+    // whose sub-metric never receives a sample, so this costs the other
+    // scenarios nothing.
+    'http_req_waiting{kind:reject}': [`p(95)<${SLO.reject.p95}`, `p(99)<${SLO.reject.p99}`],
   };
 }

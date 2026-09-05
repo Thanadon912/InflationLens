@@ -7,6 +7,7 @@
 #   ./perf/scripts/run.sh stress             find the breaking point
 #   ./perf/scripts/run.sh spike              surge and recovery
 #   ./perf/scripts/run.sh calculate          CPU-bound POST path
+#   ./perf/scripts/run.sh abuse              what refusing a request costs
 #
 #   --no-prom     skip Prometheus; produce only the standalone HTML report
 #   --reseed      rebuild the seeded cache even if it already exists
@@ -57,7 +58,7 @@ for arg in "$@"; do
 done
 
 if [[ ! -f "$PERF_DIR/k6/$SCENARIO.js" ]]; then
-  echo "usage: $0 {smoke|load|stress|spike|calculate} [--no-prom] [--reseed] [--keep-server]" >&2
+  echo "usage: $0 {smoke|load|stress|spike|calculate|abuse} [--no-prom] [--reseed] [--keep-server]" >&2
   exit 2
 fi
 
