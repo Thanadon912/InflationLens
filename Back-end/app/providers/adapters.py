@@ -137,6 +137,7 @@ def _fetch_world_bank(mappings, *, start_year, client):
     bundles = []
     for mapping in mappings:
         geo = mapping.get("provider_geography", mapping["geography"])
+        cross_section = bool(mapping.get("cross_section"))
         page = 1
         all_points = []
         while True:
@@ -147,7 +148,22 @@ def _fetch_world_bank(mappings, *, start_year, client):
             if not isinstance(data, list) or len(data) != 2:
                 raise ProviderSchemaError("World Bank response envelope changed")
             for item in data[1] or []:
-                if item.get("value") is not None:
+                if item.get("value") is None:
+                    continue
+                if cross_section:
+                    # geo="all" returns one row per economy *and* per
+                    # region/income-group aggregate ("World", "OECD
+                    # members", ...); aggregates report an empty
+                    # countryiso3code rather than a real ISO 3166-1
+                    # alpha-3 code, so requiring one here is what limits
+                    # this to actual countries (joined onward via
+                    # app/config/iso_numeric.yaml).
+                    iso3 = item.get("countryiso3code")
+                    if not iso3:
+                        continue
+                    point_mapping = {**mapping, "component_id": iso3}
+                    all_points.append(SourcePoint(point_mapping, item["date"], _number(item["value"]), provider_status=(item.get("country") or {}).get("value") or None))
+                else:
                     all_points.append(SourcePoint(mapping, item["date"], _number(item["value"]), provider_status=item.get("obs_status") or None))
             bundles.append(FetchBundle("world_bank", url, utc_now(), body, response.headers.get("content-type", "application/json"), tuple(all_points if page == data[0].get("pages", 1) else ())))
             if page >= data[0].get("pages", 1):

@@ -1,5 +1,8 @@
+import math
+
 import pytest
 
+from app.engines.shared.errors import DataQualityError
 from app.models.coverage import CoverageReport
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
@@ -41,6 +44,16 @@ class TestComponent:
         )
         assert c.is_score is True
 
+    def test_infinite_value_is_rejected(self):
+        # Regression: a bare Infinity/NaN must never reach the response --
+        # JSON.parse() on the frontend rejects those literals outright.
+        with pytest.raises(DataQualityError):
+            Component(key="mom", label="Period-over-period inflation", value=math.inf, unit=Unit.PERCENT_MOM)
+
+    def test_nan_value_is_rejected(self):
+        with pytest.raises(DataQualityError):
+            Component(key="mom", label="Period-over-period inflation", value=math.nan, unit=Unit.PERCENT_MOM)
+
     def test_to_dict(self):
         c = Component(key="rent", label="Rent Inflation", value=4.1, unit=Unit.PERCENT_YOY)
         d = c.to_dict()
@@ -73,6 +86,14 @@ class TestIndicatorResultContract:
     def test_value_requires_unit(self):
         with pytest.raises(ValueError):
             make_result(value=3.2, unit=None)
+
+    def test_infinite_value_is_rejected(self):
+        with pytest.raises(DataQualityError):
+            make_result(value=math.inf)
+
+    def test_nan_value_is_rejected(self):
+        with pytest.raises(DataQualityError):
+            make_result(value=math.nan)
 
     def test_unavailable_requires_none_value(self):
         with pytest.raises(ValueError):

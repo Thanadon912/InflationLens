@@ -19,6 +19,7 @@ from app.engines.shared.aggregation import laspeyres_price_index
 from app.engines.shared.errors import DataQualityError
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.quality import derive_confidence
+from app.engines.shared.validation import validate_positive_index
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
@@ -103,6 +104,9 @@ def calculate(
 
     replacements = replacements or {}
 
+    for item in quantities_base:
+        validate_positive_index(prices_base[item], context=f"{INDICATOR_ID}.prices_base[{item}]")
+
     fli_current = laspeyres_price_index(prices_current, prices_base, quantities_base)
     fli_prior_year = laspeyres_price_index(prices_prior_year, prices_base, quantities_base)
     headline_value = year_over_year(fli_current, fli_prior_year)
@@ -130,6 +134,8 @@ def calculate(
     unit_price_components: list[Component] = []
     if package_sizes_current and package_sizes_base:
         for item in sorted(set(package_sizes_current) & set(package_sizes_base) & set(prices_current) & set(prices_base)):
+            validate_positive_index(package_sizes_current[item], context=f"{INDICATOR_ID}.package_sizes_current[{item}]")
+            validate_positive_index(package_sizes_base[item], context=f"{INDICATOR_ID}.package_sizes_base[{item}]")
             u_t = prices_current[item] / package_sizes_current[item]
             u_0 = prices_base[item] / package_sizes_base[item]
             unit_price_components.append(

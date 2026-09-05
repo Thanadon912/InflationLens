@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import producer_pressure as gpp
+from app.engines.shared.errors import InvalidWeightError
 from app.models.enums import Coverage
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
@@ -81,3 +82,39 @@ class TestCompositeScore:
         windows = {"ppi": [1.0, 2.0, 3.0]}
         result = gpp.calculate(**base_kwargs(composite_weights=weights, standardization_windows=windows))
         assert not any(c.key == "composite_pressure_score" for c in result.components)
+
+
+class TestInvalidWeights:
+    def test_ppi_weights_not_summing_to_one_raises(self):
+        with pytest.raises(InvalidWeightError):
+            gpp.calculate(**base_kwargs(gdp_ppp_weights={"USA": 0.5, "EA": 0.9}))
+
+    def test_commodity_weight_key_mismatch_raises(self):
+        with pytest.raises(InvalidWeightError):
+            gpp.calculate(**base_kwargs(commodity_weights={"oil": 0.7, "gas": 0.3}))
+
+    def test_negative_import_share_weight_raises(self):
+        with pytest.raises(InvalidWeightError):
+            gpp.calculate(**base_kwargs(import_share_weights={"USA": 1.2, "EA": -0.2}))
+
+
+class TestCompositeScoreDegradesGracefully:
+    def test_insufficient_standardization_window_omits_score_with_warning(self):
+        # A window with fewer than 2 historical values can't produce a
+        # z-score; the composite must degrade to a warning, never raise
+        # past the calculate() boundary.
+        windows = {
+            "ppi": [1.0],  # too short
+            "import": [2.0, 3.0, 4.0],
+            "commodity": [3.0, 5.0, 7.0],
+            "logistics": [5.0, 10.0, 15.0],
+        }
+        weights = {"ppi": 0.3, "import": 0.25, "commodity": 0.25, "logistics": 0.2}
+        result = gpp.calculate(
+            **base_kwargs(
+                freight_index_current=120.0, freight_index_prior_year=100.0,
+                composite_weights=weights, standardization_windows=windows,
+            )
+        )
+        assert not any(c.key == "composite_pressure_score" for c in result.components)
+        assert any("composite_pressure_score unavailable" in w for w in result.warnings)

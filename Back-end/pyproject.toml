@@ -20,6 +20,14 @@ dev = [
     "pytest-cov>=5.0",
     "hypothesis>=6.100",
 ]
+# Load testing only (see ../perf/README.md). Flask's dev server serves one
+# request at a time behind a lock and is explicitly "not suitable for
+# production" -- measuring it under concurrency measures the dev server,
+# not this API. `perf/scripts/run.sh` runs gunicorn instead. Kept out of
+# `dev` so the normal test/CI install stays unchanged.
+perf = [
+    "gunicorn>=23.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -27,7 +35,18 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-ra --strict-markers -m \"not live\""
 markers = ["live: read-only tests against official provider APIs"]
 
 [tool.coverage.run]
 branch = true
+source = ["app"]
+
+[tool.coverage.report]
+# Enforced automatically whenever --cov is passed (full-suite/CI runs);
+# deliberately not baked into pytest's own addopts, since forcing --cov on
+# every invocation would fail a plain `pytest tests/unit/test_foo.py`
+# selective run on "low coverage" for code that test file was never meant
+# to cover. See README.md's `pytest --cov=app ...` command for the run
+# this gate actually protects.
+fail_under = 97

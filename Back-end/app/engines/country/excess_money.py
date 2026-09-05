@@ -14,7 +14,7 @@ from app.engines.shared.errors import EngineError
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.periods import Period
 from app.engines.shared.quality import derive_confidence
-from app.engines.shared.validation import validate_period_alignment
+from app.engines.shared.validation import validate_period_alignment, validate_positive_index
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
@@ -69,6 +69,8 @@ def calculate(
     velocity_adjusted_mp = None
     if all(v is not None for v in (nominal_gdp_current, nominal_gdp_prior, money_current, money_prior)):
         try:
+            validate_positive_index(money_current, context=f"{INDICATOR_ID}.money_current")
+            validate_positive_index(money_prior, context=f"{INDICATOR_ID}.money_prior")
             velocity_current = nominal_gdp_current / money_current
             velocity_prior = nominal_gdp_prior / money_prior
             velocity_growth = year_over_year(velocity_current, velocity_prior)

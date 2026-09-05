@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import consumer as gc
+from app.engines.shared.errors import InvalidWeightError
 from app.models.enums import Coverage
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
@@ -74,3 +75,27 @@ class TestGeometricView:
         weights = {"USA": 0.5, "EA": 0.5}
         result = gc.calculate(country_headline_rates=rates, country_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
         assert not any(c.key == "geometric_period_relative_percent" for c in result.components)
+
+
+class TestInvalidWeights:
+    def test_weights_not_summing_to_one_raises(self):
+        rates = {"USA": 3.2, "EA": 2.5}
+        weights = {"USA": 0.6, "EA": 0.6}  # sums to 1.2
+        with pytest.raises(InvalidWeightError):
+            gc.calculate(country_headline_rates=rates, country_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_mismatched_keys_between_rates_and_weights_raises(self):
+        rates = {"USA": 3.2, "EA": 2.5}
+        weights = {"USA": 0.5, "THA": 0.5}  # EA/THA mismatch
+        with pytest.raises(InvalidWeightError):
+            gc.calculate(country_headline_rates=rates, country_weights=weights, all_geographies=ALL_GEOS, period="p", calculated_at=CALCULATED_AT)
+
+    def test_negative_weight_raises(self):
+        rates = {"USA": 3.2, "EA": 2.5}
+        weights = {"USA": 1.2, "EA": -0.2}
+        with pytest.raises(InvalidWeightError):
+            gc.calculate(country_headline_rates=rates, country_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_empty_rates_and_weights_raises(self):
+        with pytest.raises(InvalidWeightError):
+            gc.calculate(country_headline_rates={}, country_weights={}, all_geographies=(), period="p", calculated_at=CALCULATED_AT)

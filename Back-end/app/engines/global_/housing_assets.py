@@ -16,7 +16,9 @@ from collections.abc import Mapping
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean
 from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.errors import EngineError
 from app.engines.shared.growth import year_over_year
+from app.engines.shared.validation import validate_positive_index
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
@@ -104,20 +106,24 @@ def calculate(
         v is not None
         for v in (asset_price_index_current, asset_price_index_prior_year, income_index_current, income_index_prior_year)
     ):
-        ratio_current = asset_price_index_current / income_index_current
-        asset_growth = year_over_year(asset_price_index_current, asset_price_index_prior_year)
-        income_growth = year_over_year(income_index_current, income_index_prior_year)
-        components.append(
-            Component(key="asset_income_ratio", label="Asset-to-Income Ratio", value=ratio_current, unit=Unit.RATIO)
-        )
-        components.append(
-            Component(
-                key="asset_income_ratio_growth_approx",
-                label="Asset-to-Income Ratio Growth (approx)",
-                value=asset_growth - income_growth,
-                unit=Unit.PERCENT_YOY,
+        try:
+            validate_positive_index(income_index_current, context=f"{INDICATOR_ID}.income_index_current")
+            ratio_current = asset_price_index_current / income_index_current
+            asset_growth = year_over_year(asset_price_index_current, asset_price_index_prior_year)
+            income_growth = year_over_year(income_index_current, income_index_prior_year)
+            components.append(
+                Component(key="asset_income_ratio", label="Asset-to-Income Ratio", value=ratio_current, unit=Unit.RATIO)
             )
-        )
+            components.append(
+                Component(
+                    key="asset_income_ratio_growth_approx",
+                    label="Asset-to-Income Ratio Growth (approx)",
+                    value=asset_growth - income_growth,
+                    unit=Unit.PERCENT_YOY,
+                )
+            )
+        except EngineError as exc:
+            warnings.append(f"asset_income_ratio unavailable: {exc.message}")
     else:
         warnings.append(f"{INDICATOR_ID}: asset_income_ratio unavailable (missing asset/income index data)")
 

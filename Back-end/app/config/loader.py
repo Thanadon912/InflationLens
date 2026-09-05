@@ -82,6 +82,26 @@ def load_source_registry() -> dict:
     return load_yaml(CONFIG_DIR / "source_registry.yaml")
 
 
+def load_us_regions() -> dict:
+    """Census-region assignment by 2-digit state FIPS (app/config/us_regions.yaml).
+
+    Backs GET /api/v1/regions/us: every state inherits its census region's
+    published regional CPI (source_registry.yaml), never a per-state estimate.
+    """
+
+    return load_yaml(CONFIG_DIR / "us_regions.yaml")
+
+
+def load_iso_numeric() -> dict:
+    """ISO 3166-1 alpha-3 -> numeric join table (app/config/iso_numeric.yaml).
+
+    Backs GET /api/v1/world/cross-section: joins World Bank's ISO3 country
+    codes onto world-atlas's numeric-keyed TopoJSON features.
+    """
+
+    return load_yaml(CONFIG_DIR / "iso_numeric.yaml")
+
+
 def load_country_profile(geography: str) -> dict:
     path = CONFIG_DIR / "country_profiles" / f"{geography.upper()}.yaml"
     try:

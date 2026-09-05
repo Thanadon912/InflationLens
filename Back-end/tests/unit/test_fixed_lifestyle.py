@@ -159,3 +159,50 @@ class TestMismatchedBasket:
                 period="2026-06",
                 calculated_at=CALCULATED_AT,
             )
+
+
+class TestZeroBasePriceOrPackageSize:
+    def test_zero_base_price_for_item_raises_not_zero_division(self):
+        base_prices = {"rice": 0.0, "steak": 20.0}
+        current = {"rice": 12.0, "steak": 24.0}
+        with pytest.raises(DataQualityError):
+            fl.calculate(
+                prices_current=current,
+                prices_prior_year=BASE_PRICES,
+                prices_base=base_prices,
+                quantities_base=BASE_QTY,
+                config=cfg(),
+                geography="USA",
+                period="2026-06",
+                calculated_at=CALCULATED_AT,
+            )
+
+    def test_zero_current_package_size_raises_not_zero_division(self):
+        with pytest.raises(DataQualityError):
+            fl.calculate(
+                prices_current=BASE_PRICES,
+                prices_prior_year=BASE_PRICES,
+                prices_base=BASE_PRICES,
+                quantities_base=BASE_QTY,
+                config=cfg(),
+                geography="USA",
+                period="2026-06",
+                calculated_at=CALCULATED_AT,
+                package_sizes_current={"rice": 0.0, "steak": 1.0},
+                package_sizes_base={"rice": 1.0, "steak": 1.0},
+            )
+
+    def test_zero_base_package_size_raises_not_zero_division(self):
+        with pytest.raises(DataQualityError):
+            fl.calculate(
+                prices_current=BASE_PRICES,
+                prices_prior_year=BASE_PRICES,
+                prices_base=BASE_PRICES,
+                quantities_base=BASE_QTY,
+                config=cfg(),
+                geography="USA",
+                period="2026-06",
+                calculated_at=CALCULATED_AT,
+                package_sizes_current={"rice": 1.0, "steak": 1.0},
+                package_sizes_base={"rice": 0.0, "steak": 1.0},
+            )

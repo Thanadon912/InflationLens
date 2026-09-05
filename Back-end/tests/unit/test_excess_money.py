@@ -84,3 +84,29 @@ class TestVelocityAdjusted:
         )
         assert result.coverage == Coverage.PARTIAL
         assert not any(c.key == "velocity_adjusted_monetary_pressure" for c in result.components)
+
+    def test_zero_money_current_is_engine_error_not_zero_division(self):
+        q = parse_period("2026-Q2", Frequency.QUARTERLY)
+        result = em.calculate(
+            money_growth_percent=8.0, real_output_growth_percent=3.0,
+            money_period=q, real_output_period=q,
+            geography="USA", period="2026-Q2", calculated_at=CALCULATED_AT,
+            nominal_gdp_current=26000.0, nominal_gdp_prior=24500.0,
+            money_current=0.0, money_prior=20000.0,
+        )
+        # Must degrade to a warning like the missing-inputs case, never raise
+        # a bare ZeroDivisionError past the engine boundary.
+        assert not any(c.key == "velocity_adjusted_monetary_pressure" for c in result.components)
+        assert any("velocity_adjusted_monetary_pressure unavailable" in w for w in result.warnings)
+
+    def test_zero_money_prior_is_engine_error_not_zero_division(self):
+        q = parse_period("2026-Q2", Frequency.QUARTERLY)
+        result = em.calculate(
+            money_growth_percent=8.0, real_output_growth_percent=3.0,
+            money_period=q, real_output_period=q,
+            geography="USA", period="2026-Q2", calculated_at=CALCULATED_AT,
+            nominal_gdp_current=26000.0, nominal_gdp_prior=24500.0,
+            money_current=21500.0, money_prior=0.0,
+        )
+        assert not any(c.key == "velocity_adjusted_monetary_pressure" for c in result.components)
+        assert any("velocity_adjusted_monetary_pressure unavailable" in w for w in result.warnings)

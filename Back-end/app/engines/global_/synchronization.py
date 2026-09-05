@@ -21,8 +21,8 @@ from app.engines.shared.aggregation import (
     sample_std,
     unweighted_median,
 )
-from app.engines.shared.coverage import build_coverage_report
-from app.engines.shared.errors import DataQualityError
+from app.engines.shared.coverage import build_coverage_report, renormalize_weights
+from app.engines.shared.errors import DataQualityError, EngineError
 from app.engines.shared.standardization import composite_score, historical_mean_std, z_score
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
@@ -74,19 +74,32 @@ def calculate(
     warnings: list[str] = []
 
     if population_weights:
-        share_above_pop = sum(
-            population_weights[c] * (1 if v > threshold_percent else 0)
-            for c, v in country_rates_current.items()
-            if c in population_weights
-        ) * 100
-        components.append(
-            Component(
-                key="share_above_pop_weighted",
-                label="Population-Weighted Share Above Threshold",
-                value=share_above_pop,
-                unit=Unit.SHARE_PERCENT,
-            )
-        )
+        covered = set(country_rates_current) & set(population_weights)
+        if covered:
+            try:
+                renormalized_pop_weights = renormalize_weights(population_weights, covered)
+                share_above_pop = sum(
+                    renormalized_pop_weights[c] * (1 if country_rates_current[c] > threshold_percent else 0)
+                    for c in covered
+                ) * 100
+                components.append(
+                    Component(
+                        key="share_above_pop_weighted",
+                        label="Population-Weighted Share Above Threshold",
+                        value=share_above_pop,
+                        unit=Unit.SHARE_PERCENT,
+                    )
+                )
+                if covered != set(country_rates_current):
+                    missing = sorted(set(country_rates_current) - covered)
+                    warnings.append(
+                        f"{INDICATOR_ID}: share_above_pop_weighted computed over {len(covered)}/{count} countries "
+                        f"(no population weight for {missing})"
+                    )
+            except EngineError as exc:
+                warnings.append(f"share_above_pop_weighted unavailable: {exc.message}")
+        else:
+            warnings.append(f"{INDICATOR_ID}: share_above_pop_weighted unavailable (no overlap between country_rates_current and population_weights)")
 
     share_accelerating = None
     if country_rates_prior:

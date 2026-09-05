@@ -7,8 +7,15 @@ Deterministic Python/Flask back end for ten country and eight global inflation l
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/python -m pytest -q --cov=app --cov-branch --cov-report=term-missing --cov-fail-under=95
+.venv/bin/python -m pytest -q --cov=app --cov-branch --cov-report=term-missing
 ```
+
+The 97% coverage gate (`[tool.coverage.report] fail_under` in `pyproject.toml`)
+applies automatically whenever `--cov` is passed -- no `--cov-fail-under` flag
+needed. A bare `pytest` (no `--cov`) skips coverage entirely, so running a
+single test file during development never fails on unrelated coverage. `live`
+tests (real, read-only calls to official provider APIs) are excluded by
+default (`addopts = -m "not live"`); run them explicitly with `-m live`.
 
 Run locally:
 
@@ -20,6 +27,24 @@ A ready-to-run headline request is available at
 `tests/fixtures/requests/usa_headline.json` for local smoke tests.
 
 All routes are under `/api/v1`. Metadata is available at `/meta/indicators`, `/meta/methodology`, `/meta/global-weights`, and `/meta/countries`.
+
+### Load testing
+
+`pytest` proves the engine is correct; it never measures how long anything
+takes. That lives in [`../perf/`](../perf/README.md) -- a k6 suite that drives
+the API under concurrency and reports against explicit SLOs.
+
+```bash
+.venv/bin/pip install -e '.[perf]'   # adds gunicorn
+cd .. && ./perf/scripts/run.sh load
+```
+
+Two things there matter to backend work. It runs the API on **gunicorn**, not
+`flask run`, because the development server serves requests one at a time and
+measuring it under load measures the dev server. And it seeds its own cache with
+`scripts/seed_perf_db.py` -- the same public store API as `seed_e2e_db.py`, but
+at the volume `flask data sync` really produces (7 measures x 24 months, ~220
+economies in the cross-section), so payload sizes are the real ones.
 
 ## Official data ingestion
 

@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import synchronization as gs
+from app.engines.shared.errors import DataQualityError
 from app.models.enums import Coverage
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
@@ -63,6 +64,14 @@ class TestShareAccelerating:
         assert result.coverage == Coverage.PARTIAL
         assert not any(c.key == "share_accelerating" for c in result.components)
 
+    def test_no_overlap_between_current_and_prior_omits_component(self):
+        # country_rates_prior is supplied (truthy) but shares no country
+        # with country_rates_current -- today this silently omits
+        # share_accelerating without a warning, unlike the analogous
+        # population_weights overlap check. Pinning current behavior.
+        result = gs.calculate(country_rates_current={"A": 5.0}, country_rates_prior={"Z": 4.0}, threshold_percent=0.0, all_geographies=("A",), period="p", calculated_at=CALCULATED_AT)
+        assert not any(c.key == "share_accelerating" for c in result.components)
+
 
 class TestPopulationWeighted:
     def test_matches_manual_weighted_share(self):
@@ -71,6 +80,32 @@ class TestPopulationWeighted:
         result = gs.calculate(country_rates_current=rates, threshold_percent=3.0, all_geographies=("A", "B"), period="p", calculated_at=CALCULATED_AT, population_weights=weights)
         pop_share = next(c for c in result.components if c.key == "share_above_pop_weighted")
         assert pop_share.value == pytest.approx(80.0)
+
+    def test_weights_not_summing_to_one_are_renormalized_not_taken_literally(self):
+        # Regression: population_weights summing to 1.8 must never yield a
+        # share above 100%. The share is defined over the covered subset
+        # of country_rates_current, renormalized, not the raw weights.
+        rates = {"USA": 5.0, "EA": 3.0}  # only USA is above the threshold
+        weights = {"USA": 0.9, "EA": 0.9}
+        result = gs.calculate(country_rates_current=rates, threshold_percent=4.0, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT, population_weights=weights)
+        pop_share = next(c for c in result.components if c.key == "share_above_pop_weighted")
+        assert pop_share.value == pytest.approx(50.0)
+        assert 0.0 <= pop_share.value <= 100.0
+
+    def test_partial_weight_coverage_renormalizes_over_covered_countries_and_warns(self):
+        rates = {"USA": 5.0, "EA": 3.0, "JPN": 1.0}  # only USA is above the threshold
+        weights = {"USA": 0.5, "EA": 0.5}  # JPN has no population weight
+        result = gs.calculate(country_rates_current=rates, threshold_percent=4.0, all_geographies=("USA", "EA", "JPN"), period="p", calculated_at=CALCULATED_AT, population_weights=weights)
+        pop_share = next(c for c in result.components if c.key == "share_above_pop_weighted")
+        assert pop_share.value == pytest.approx(50.0)
+        assert any("share_above_pop_weighted" in w for w in result.warnings)
+
+    def test_no_overlap_between_rates_and_population_weights_warns_not_omits_silently(self):
+        rates = {"USA": 5.0, "EA": 3.0}
+        weights = {"JPN": 1.0}  # no country in common with rates
+        result = gs.calculate(country_rates_current=rates, threshold_percent=4.0, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT, population_weights=weights)
+        assert not any(c.key == "share_above_pop_weighted" for c in result.components)
+        assert any("no overlap" in w for w in result.warnings)
 
 
 class TestCommonFactorModelAlwaysUnavailable:
@@ -108,3 +143,23 @@ class TestSynchronizationScore:
         prior = {"A": 4.0, "B": 4.0}
         result = gs.calculate(country_rates_current=current, country_rates_prior=prior, threshold_percent=3.0, all_geographies=("A", "B"), period="p", calculated_at=CALCULATED_AT)
         assert not any(c.key == "synchronization_score" for c in result.components)
+
+
+class TestEmptyInput:
+    def test_empty_country_rates_raises(self):
+        with pytest.raises(DataQualityError):
+            gs.calculate(country_rates_current={}, threshold_percent=2.0, all_geographies=(), period="p", calculated_at=CALCULATED_AT)
+
+
+class TestSynchronizationScoreDegradesGracefully:
+    def test_insufficient_dispersion_window_omits_score_with_warning(self):
+        current = {"A": 5.0, "B": 3.0, "C": 6.0, "D": 2.0}
+        prior = {"A": 4.0, "B": 4.0, "C": 5.0, "D": 3.0}
+        weights = {"share_accelerating": 0.4, "share_above_threshold": 0.4, "dispersion": 0.2}
+        result = gs.calculate(
+            country_rates_current=current, country_rates_prior=prior,
+            threshold_percent=3.0, all_geographies=("A", "B", "C", "D"), period="p", calculated_at=CALCULATED_AT,
+            composite_weights=weights, dispersion_standardization_window=[1.0],  # too short
+        )
+        assert not any(c.key == "synchronization_score" for c in result.components)
+        assert any("synchronization_score unavailable" in w for w in result.warnings)

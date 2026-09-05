@@ -79,6 +79,10 @@ class TestNormalCalculation:
         keys = {c.key for c in result.components}
         assert "mom" in keys
         assert "three_month_annualized" in keys
+        assert "six_month_annualized" in keys
+        six_m = next(c for c in result.components if c.key == "six_month_annualized")
+        assert six_m.value is not None
+        assert six_m.unit == Unit.PERCENT_ANNUALIZED
 
     def test_provenance_recorded(self):
         series = monthly_series()
@@ -145,6 +149,9 @@ class TestMissingHistory:
         three_m = next(c for c in result.components if c.key == "three_month_annualized")
         assert three_m.value is None
         assert any("three_month_annualized unavailable" in w for w in result.warnings)
+        six_m = next(c for c in result.components if c.key == "six_month_annualized")
+        assert six_m.value is None
+        assert any("six_month_annualized unavailable" in w for w in result.warnings)
 
 
 class TestInvalidUnit:
@@ -220,5 +227,6 @@ class TestQuarterlyFrequency:
         period = parse_period("2025-Q1", Frequency.QUARTERLY)
         result = hc.calculate(series, period, calculated_at=CALCULATED_AT)
         assert result.value == pytest.approx(3.0)
-        # three-month annualized momentum is monthly-only, must be absent
+        # three/six-month annualized momentum is monthly-only, must be absent
         assert not any(c.key == "three_month_annualized" for c in result.components)
+        assert not any(c.key == "six_month_annualized" for c in result.components)

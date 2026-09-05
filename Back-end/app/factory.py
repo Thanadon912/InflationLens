@@ -14,6 +14,7 @@ import logging
 import os
 
 from flask import Flask
+from flask.json.provider import DefaultJSONProvider
 from flask_cors import CORS
 
 from app.api.blueprint import calculate_bp
@@ -27,8 +28,26 @@ from app.data.cli import register_data_cli
 MAX_CONTENT_LENGTH_BYTES = 2 * 1024 * 1024  # 2 MiB
 
 
+class _StrictJSONProvider(DefaultJSONProvider):
+    """Refuse to serialize NaN/Infinity as bare JSON literals.
+
+    ``Component``/``IndicatorResult`` already reject non-finite values at
+    construction (a 422 domain error -- see app/models/indicator_result.py).
+    This is defense-in-depth for the few response paths in app/api/data.py
+    that build plain dicts outside that model layer: stdlib's json module
+    happily emits ``NaN``/``Infinity`` as bare identifiers, which is valid
+    Python but not valid JSON -- JavaScript's JSON.parse() (every browser,
+    including this project's own frontend) rejects them outright.
+    """
+
+    def dumps(self, obj, **kwargs):
+        kwargs.setdefault("allow_nan", False)
+        return super().dumps(obj, **kwargs)
+
+
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.json = _StrictJSONProvider(app)
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH_BYTES
     app.config["JSON_SORT_KEYS"] = False
 

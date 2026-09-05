@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import median_country as mc
+from app.engines.shared.errors import DataQualityError, InvalidWeightError
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
 ALL_GEOS = ("A", "B", "C", "D", "E")
@@ -55,3 +56,21 @@ class TestMedianAndSpread:
         rates = {"A": 1.0, "B": 2.0}
         result = mc.calculate(country_rates=rates, all_geographies=ALL_GEOS, period="p", calculated_at=CALCULATED_AT)
         assert result.coverage_report.missing_geographies == ("C", "D", "E")
+
+
+class TestInvalidInputs:
+    def test_empty_country_rates_raises(self):
+        with pytest.raises(DataQualityError):
+            mc.calculate(country_rates={}, all_geographies=(), period="p", calculated_at=CALCULATED_AT)
+
+    def test_weighted_median_with_mismatched_weight_keys_raises(self):
+        rates = {"A": 1.0, "B": 5.0}
+        weights = {"A": 0.5, "C": 0.5}  # B/C mismatch
+        with pytest.raises(InvalidWeightError):
+            mc.calculate(country_rates=rates, all_geographies=("A", "B"), period="p", calculated_at=CALCULATED_AT, country_weights=weights)
+
+    def test_weighted_median_with_weights_not_summing_to_one_raises(self):
+        rates = {"A": 1.0, "B": 5.0}
+        weights = {"A": 0.5, "B": 0.9}
+        with pytest.raises(InvalidWeightError):
+            mc.calculate(country_rates=rates, all_geographies=("A", "B"), period="p", calculated_at=CALCULATED_AT, country_weights=weights)

@@ -10,9 +10,13 @@ from typing import Any
 
 from app.api.blueprint import _calculate_country
 from app.api.country import HANDLERS
+from app.api.util import now_iso
 from app.config.loader import load_country_profile, load_source_registry
 from app.data.store import SnapshotStore
 from app.engines.shared.growth import year_over_year
+from app.models.enums import Confidence, Coverage, Unit
+from app.models.indicator_result import IndicatorResult
+from app.models.methodology import InputProvenance
 from app.providers.base import ProviderError, ProviderSchemaError, ResilientClient, SourcePoint, utc_now
 from app.providers import fetch_provider
 
@@ -123,6 +127,12 @@ class IngestionService:
                 self.store.add_issue(run_id, "CROSS_SOURCE_DIFFERENCE", "Primary BLS CPI and FRED shadow series differ beyond tolerance; primary was retained", severity="warning", provider="bls/fred", geography="USA", indicator_id="headline_consumer_inflation", details={"period": row["observation_period"], "primary": row["value"], "shadow": other["value"], "tolerance": tolerance})
 
     def calculate_available(self, run_id: str, geography: str, indicator_id: str) -> int:
+        if indicator_id == "headline_consumer_inflation":
+            # Seven US measures and four region series (source_registry.yaml)
+            # share this one (geography, indicator_id) pair, distinguished
+            # by measure_id/region_id -- a dimension the generic
+            # single-series path below does not know about.
+            return self._calculate_headline_variants(run_id, geography)
         candidates = self._candidate_periods(geography, indicator_id)
         calculated = 0
         profile = load_country_profile(geography)
@@ -137,8 +147,71 @@ class IngestionService:
                 self.store.add_issue(run_id, "PERIOD_UNAVAILABLE", str(exc), severity="warning", geography=geography, indicator_id=indicator_id, details={"period": period})
         return calculated
 
+    def _headline_variants(self, geography: str) -> list[dict]:
+        """Every headline_consumer_inflation all_items_cpi_index mapping
+        configured for this geography -- one per measure_id/region_id."""
+        return [
+            m for m in self.registry["sources"]
+            if m["geography"] == geography and m["indicator_id"] == "headline_consumer_inflation" and m["role"] == "all_items_cpi_index"
+        ]
+
+    def _calculate_headline_variants(self, run_id: str, geography: str) -> int:
+        calculated = 0
+        profile = load_country_profile(geography)
+        limit = self.registry["defaults"]["monthly_backfill_periods"]
+        for mapping in self._headline_variants(geography):
+            measure_id, region_id = mapping.get("measure_id"), mapping.get("region_id")
+            rows = [r for r in self.store.latest_observations(geography, "headline_consumer_inflation", "all_items_cpi_index") if r["source_series_id"] == mapping["series_id"]]
+            if not rows:
+                continue
+            if mapping.get("is_rate"):
+                calculated += self._save_published_rate(run_id, geography, measure_id, region_id, rows[:limit])
+                continue
+            periods = {r["observation_period"] for r in rows}
+            complete = {period for period in periods if _year_before(period) in periods}
+            for period in sorted(complete, reverse=True)[:limit]:
+                try:
+                    selected = [r for r in rows if _months_before(period, 15) <= r["observation_period"] <= period]
+                    inputs = {"all_items_cpi_index": [_public_observation(r, "headline_consumer_inflation") for r in selected]}
+                    result = _calculate_country(HANDLERS["headline_consumer_inflation"], geography, "headline_consumer_inflation", {"period": period, "inputs": inputs}, profile).to_dict()
+                    vintages = [r["data_vintage"] or r["retrieved_at"] for r in selected]
+                    self.store.save_result(run_id, geography, "headline_consumer_inflation", period, result, vintages, measure_id=measure_id, region_id=region_id)
+                    calculated += 1
+                except Exception as exc:
+                    self.store.add_issue(run_id, "PERIOD_UNAVAILABLE", str(exc), severity="warning", geography=geography, indicator_id="headline_consumer_inflation", details={"period": period, "measure_id": measure_id, "region_id": region_id})
+        return calculated
+
+    def _save_published_rate(self, run_id: str, geography: str, measure_id: str | None, region_id: str | None, rows: list[dict]) -> int:
+        """Trimmed-mean PCE (and anything else marked ``is_rate: true``):
+        the publisher issues a percent-change series with no underlying
+        index, so there is nothing for the engine to recompute. Stored and
+        served exactly as published, method='published_rate'."""
+
+        calculated = 0
+        for row in rows:
+            provenance = (InputProvenance(provider=row["provider"], series_id=row["source_series_id"], source_url=row["source_url"], data_vintage=row["data_vintage"], retrieved_at=row["retrieved_at"]),)
+            result = IndicatorResult(
+                indicator_id="headline_consumer_inflation",
+                geography=geography,
+                period=row["observation_period"],
+                value=row["value"],
+                unit=Unit.PERCENT_YOY,
+                method="published_rate",
+                methodology_version="1.0.1",
+                input_series=provenance,
+                coverage=Coverage.FULL,
+                confidence=Confidence.LOW if row["is_estimated"] else Confidence.HIGH,
+                is_estimated=bool(row["is_estimated"]),
+                warnings=("Published rate: the source publishes no underlying index for this measure, so it is served exactly as issued rather than recomputed.",),
+                calculated_at=now_iso(),
+                metadata={"seasonally_adjusted": row["seasonally_adjusted"]},
+            ).to_dict()
+            self.store.save_result(run_id, geography, "headline_consumer_inflation", row["observation_period"], result, [row["data_vintage"] or row["retrieved_at"]], measure_id=measure_id, region_id=region_id)
+            calculated += 1
+        return calculated
+
     def _candidate_periods(self, geography: str, indicator_id: str) -> list[str]:
-        role = {"headline_consumer_inflation": "all_items_cpi_index", "essential_cost_inflation": "category_rates", "broad_money_expansion": "money_level", "economy_wide_inflation": "nominal_gdp"}[indicator_id]
+        role = {"essential_cost_inflation": "category_rates", "broad_money_expansion": "money_level", "economy_wide_inflation": "nominal_gdp"}[indicator_id]
         rows = self.store.latest_observations(geography, indicator_id, role)
         limit = self.registry["defaults"]["quarterly_backfill_periods" if indicator_id == "economy_wide_inflation" else "monthly_backfill_periods"]
         periods = {r["observation_period"] for r in rows}
@@ -155,12 +228,7 @@ class IngestionService:
 
     def _payload(self, geography: str, indicator_id: str, period: str) -> tuple[dict, list[dict]]:
         used: list[dict] = []
-        if indicator_id == "headline_consumer_inflation":
-            rows = self.store.latest_observations(geography, indicator_id, "all_items_cpi_index")
-            selected = [r for r in rows if r["observation_period"] <= period and r["observation_period"] >= _months_before(period, 15)]
-            used.extend(selected)
-            inputs = {"all_items_cpi_index": [_public_observation(r, indicator_id) for r in selected]}
-        elif indicator_id == "essential_cost_inflation":
+        if indicator_id == "essential_cost_inflation":
             rows = [r for r in self.store.latest_observations(geography, indicator_id, "category_rates") if r["observation_period"] == period]
             used.extend(rows)
             inputs = {"category_rates": [_public_observation(r, indicator_id) for r in rows]}

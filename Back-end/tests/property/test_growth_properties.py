@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import math
 
+import pytest
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
+from app.engines.shared.errors import DataQualityError
 from app.engines.shared.growth import (
     annualized,
     log_change,
@@ -24,6 +26,12 @@ from app.engines.shared.growth import (
 positive_values = st.floats(
     min_value=1e-6, max_value=1e9, allow_nan=False, allow_infinity=False
 )
+
+# The complement of positive_values: exactly the denominators
+# _check_denominator (app/engines/shared/growth.py) exists to reject. The
+# strategies above deliberately exclude these; without dedicated coverage
+# the guards they exercise would never be property-tested at all.
+non_finite_values = st.sampled_from([math.inf, -math.inf, math.nan])
 
 
 @given(x=positive_values)
@@ -83,6 +91,30 @@ def test_yoy_and_log_change_agree_for_small_moves(x_prev, small_relative_change)
     yoy = year_over_year(x_t, x_prev)
     log_approx = log_change(x_t, x_prev)
     assert math.isclose(yoy, log_approx, abs_tol=0.05)
+
+
+@given(x_t=positive_values)
+def test_yoy_zero_denominator_always_raises(x_t):
+    with pytest.raises(DataQualityError):
+        year_over_year(x_t, 0.0)
+
+
+@given(x_t=positive_values, x_t_minus_k=non_finite_values)
+def test_yoy_non_finite_denominator_always_raises(x_t, x_t_minus_k):
+    with pytest.raises(DataQualityError):
+        year_over_year(x_t, x_t_minus_k)
+
+
+@given(x_t=positive_values)
+def test_period_over_period_zero_denominator_always_raises(x_t):
+    with pytest.raises(DataQualityError):
+        period_over_period(x_t, 0.0)
+
+
+@given(x_t=positive_values, x_t_1=non_finite_values)
+def test_annualized_non_finite_denominator_always_raises(x_t, x_t_1):
+    with pytest.raises(DataQualityError):
+        annualized(x_t, x_t_1, 12)
 
 
 def pytest_approx_zero():

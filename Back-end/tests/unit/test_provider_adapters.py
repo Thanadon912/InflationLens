@@ -74,3 +74,24 @@ def test_world_bank_pagination_and_null_values():
     assert calls == 2
     assert len(bundles) == 2
     assert bundles[-1].points[0].value == 10
+
+
+def test_world_bank_cross_section_keys_points_by_iso3_and_skips_aggregates():
+    cross_mapping = mapping("world_bank", geography="GLOBAL", provider_geography="all", cross_section=True)
+
+    def handler(request):
+        rows = [
+            {"date": "2024", "value": 3.4, "countryiso3code": "USA", "country": {"id": "US", "value": "United States"}},
+            # World Bank's "all" scope also returns region/income-group
+            # aggregates, which carry no real ISO3 code -- must be skipped.
+            {"date": "2024", "value": 6.1, "countryiso3code": "", "country": {"id": "1W", "value": "World"}},
+            {"date": "2024", "value": None, "countryiso3code": "FRA", "country": {"id": "FR", "value": "France"}},
+        ]
+        return httpx.Response(200, json=[{"page": 1, "pages": 1}, rows])
+
+    bundles = fetch_provider("world_bank", [cross_mapping], start_year=2024, client=client(handler))
+    points = bundles[0].points
+    assert len(points) == 1
+    assert points[0].mapping["component_id"] == "USA"
+    assert points[0].value == 3.4
+    assert points[0].provider_status == "United States"

@@ -78,3 +78,15 @@ class TestOptionalComponents:
         asset_g = (220.0 / 200.0 - 1) * 100
         income_g = (110.0 / 105.0 - 1) * 100
         assert growth.value == pytest.approx(asset_g - income_g)
+
+
+class TestZeroIncomeIndex:
+    def test_zero_income_index_current_marks_partial_not_zero_division(self):
+        result = gha.calculate(
+            **base_kwargs(
+                asset_price_index_current=220.0, asset_price_index_prior_year=200.0,
+                income_index_current=0.0, income_index_prior_year=105.0,
+            )
+        )
+        assert not any(c.key == "asset_income_ratio" for c in result.components)
+        assert any("asset_income_ratio unavailable" in w for w in result.warnings)

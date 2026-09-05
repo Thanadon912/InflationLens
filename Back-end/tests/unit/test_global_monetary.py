@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import monetary as gm
+from app.engines.shared.errors import DataQualityError, InvalidWeightError
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
 
@@ -47,3 +48,26 @@ class TestGlobalMonetary:
         weights = {"USA": 0.5, "EA": 0.5}
         result = gm.calculate(country_money_growth_rates=rates, gdp_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
         assert result.value < 0
+
+
+class TestInvalidInputs:
+    def test_weights_not_summing_to_one_raises(self):
+        rates = {"USA": 6.0, "EA": 4.0}
+        weights = {"USA": 0.5, "EA": 0.9}
+        with pytest.raises(InvalidWeightError):
+            gm.calculate(country_money_growth_rates=rates, gdp_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_mismatched_keys_raises(self):
+        rates = {"USA": 6.0, "EA": 4.0}
+        weights = {"USA": 0.5, "THA": 0.5}
+        with pytest.raises(InvalidWeightError):
+            gm.calculate(country_money_growth_rates=rates, gdp_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_rate_at_or_below_negative_100_percent_breaks_geometric_mean(self):
+        # A -100%+ money-growth rate implies a non-positive base for the
+        # geometric mean's product term -- must raise, not silently
+        # produce a complex/undefined result.
+        rates = {"USA": -100.0, "EA": 4.0}
+        weights = {"USA": 0.5, "EA": 0.5}
+        with pytest.raises(DataQualityError):
+            gm.calculate(country_money_growth_rates=rates, gdp_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)

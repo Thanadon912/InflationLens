@@ -11,6 +11,25 @@ from typing import Any, Iterator
 
 from app.providers.base import FetchBundle, SourcePoint, utc_now
 
+# Sentinel distinguishing "do not filter on this column" from the legitimate
+# filter value ``None`` (== "only rows where the column IS NULL"), needed by
+# SnapshotStore.list_latest_results below.
+_UNSET = object()
+
+
+class CorruptCacheError(RuntimeError):
+    """A cached JSON blob (result_json/source_vintages/details_json) failed
+    to decode. This is a server-side data-integrity fault, not a caller
+    input problem -- it stays a 500, but with a diagnosable message naming
+    the row and column instead of a bare json.JSONDecodeError traceback."""
+
+
+def _safe_json_loads(raw: str, *, column: str, row_id: str | None) -> Any:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise CorruptCacheError(f"Corrupt cached JSON in column {column!r} (row id={row_id!r}): {exc}") from exc
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sync_runs (
   id TEXT PRIMARY KEY, started_at TEXT NOT NULL, completed_at TEXT,
@@ -43,12 +62,15 @@ CREATE TABLE IF NOT EXISTS observation_lineage (
 );
 CREATE TABLE IF NOT EXISTS indicator_results (
   id TEXT PRIMARY KEY, sync_run_id TEXT NOT NULL REFERENCES sync_runs(id),
-  geography TEXT NOT NULL, indicator_id TEXT NOT NULL, period TEXT NOT NULL,
-  calculated_at TEXT NOT NULL, methodology_version TEXT NOT NULL,
-  config_version TEXT, source_vintages TEXT NOT NULL, result_json TEXT NOT NULL,
-  UNIQUE(sync_run_id, geography, indicator_id, period)
+  geography TEXT NOT NULL, indicator_id TEXT NOT NULL, measure_id TEXT, region_id TEXT,
+  period TEXT NOT NULL, calculated_at TEXT NOT NULL, methodology_version TEXT NOT NULL,
+  config_version TEXT, source_vintages TEXT NOT NULL, result_json TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_result_lookup ON indicator_results(geography, indicator_id, period, calculated_at);
+-- indicator_results' indexes are created in SnapshotStore._migrate_indicator_results
+-- instead of here: a database created before measure_id/region_id existed still has
+-- the old columnless table at this point (CREATE TABLE IF NOT EXISTS is a no-op
+-- against it), and an index naming those columns would fail to create until after
+-- that method's rebuild runs.
 CREATE TABLE IF NOT EXISTS sync_issues (
   id TEXT PRIMARY KEY, sync_run_id TEXT NOT NULL REFERENCES sync_runs(id),
   severity TEXT NOT NULL, provider TEXT, geography TEXT, indicator_id TEXT,
@@ -67,6 +89,51 @@ class SnapshotStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript(SCHEMA)
+            self._migrate_indicator_results(db)
+
+    def _migrate_indicator_results(self, db: sqlite3.Connection) -> None:
+        """Add the measure_id/region_id dimension to a pre-existing database.
+
+        ``CREATE TABLE IF NOT EXISTS`` in ``SCHEMA`` is a no-op against a
+        database created before ``headline_consumer_inflation`` gained
+        per-measure and per-region cached results (source_registry.yaml's
+        seven US measures and four regional CPI series), so its
+        ``indicator_results`` table is still bound by the old
+        ``UNIQUE(sync_run_id, geography, indicator_id, period)`` constraint.
+        SQLite cannot drop or alter a table constraint in place; the table
+        is rebuilt under its new shape and every existing row is preserved
+        with ``measure_id``/``region_id`` set to ``NULL`` (undated results
+        keep meaning "the one series this geography/indicator had before").
+        """
+
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(indicator_results)")}
+        if "measure_id" not in columns:
+            db.executescript(
+                """
+                ALTER TABLE indicator_results RENAME TO indicator_results_pre_measure;
+                CREATE TABLE indicator_results (
+                  id TEXT PRIMARY KEY, sync_run_id TEXT NOT NULL REFERENCES sync_runs(id),
+                  geography TEXT NOT NULL, indicator_id TEXT NOT NULL, measure_id TEXT, region_id TEXT,
+                  period TEXT NOT NULL, calculated_at TEXT NOT NULL, methodology_version TEXT NOT NULL,
+                  config_version TEXT, source_vintages TEXT NOT NULL, result_json TEXT NOT NULL
+                );
+                INSERT INTO indicator_results
+                  (id, sync_run_id, geography, indicator_id, measure_id, region_id, period, calculated_at, methodology_version, config_version, source_vintages, result_json)
+                  SELECT id, sync_run_id, geography, indicator_id, NULL, NULL, period, calculated_at, methodology_version, config_version, source_vintages, result_json
+                  FROM indicator_results_pre_measure;
+                DROP TABLE indicator_results_pre_measure;
+                """
+            )
+        # Runs every open, fresh database or migrated: cheap and idempotent
+        # (IF NOT EXISTS), and the one safe place to create these -- a
+        # fresh database's indicator_results already has the columns via
+        # SCHEMA above, and a legacy one only gained them just now.
+        db.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_result_variant ON indicator_results(sync_run_id, geography, indicator_id, measure_id, region_id, period);
+            CREATE INDEX IF NOT EXISTS ix_result_lookup ON indicator_results(geography, indicator_id, period, calculated_at);
+            """
+        )
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
@@ -74,6 +141,12 @@ class SnapshotStore:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         db.execute("PRAGMA journal_mode=WAL")
+        # Every call opens its own connection (see module docstring context);
+        # under a concurrent `data sync`, two writers can otherwise collide
+        # as a raw "database is locked" OperationalError. A busy_timeout
+        # makes SQLite retry internally for up to 5s before that surfaces,
+        # rather than failing immediately on first contention.
+        db.execute("PRAGMA busy_timeout=5000")
         try:
             yield db
             db.commit()
@@ -141,15 +214,55 @@ class SnapshotStore:
             latest.setdefault(key, item)
         return list(latest.values())
 
-    def save_result(self, run_id: str, geography: str, indicator_id: str, period: str, result: dict, source_vintages: list[str]) -> str:
+    def latest_retrieval_by_provider(self) -> dict[str, str]:
+        """The most recent ``retrieved_at`` timestamp raw-response fetched
+        from each provider -- the real "latest release" figure the source
+        ledger (GET /api/v1/meta/data-sources) prints per publisher, as
+        opposed to an invented release-calendar date."""
+
+        with self.connect() as db:
+            rows = db.execute("SELECT provider, MAX(retrieved_at) AS latest FROM raw_responses GROUP BY provider").fetchall()
+        return {row["provider"]: row["latest"] for row in rows}
+
+    def latest_by_component(self, geography: str, indicator_id: str, role: str) -> list[dict[str, Any]]:
+        """Collapse ``latest_observations`` to one row per ``component_id``:
+        the most recent ``observation_period`` each has published.
+
+        Built for cross-sectional reads where every component publishes on
+        its own schedule -- e.g. the world choropleth's ~190 countries
+        (``median_country_inflation``/``country_rates``, one row per ISO3),
+        where ``latest_observations`` alone would return every historical
+        year for every country rather than just each country's newest one.
+        """
+
+        latest: dict[str, dict] = {}
+        for row in self.latest_observations(geography, indicator_id, role):
+            key = row["component_id"]
+            current = latest.get(key)
+            if current is None or row["observation_period"] > current["observation_period"]:
+                latest[key] = row
+        return list(latest.values())
+
+    def save_result(self, run_id: str, geography: str, indicator_id: str, period: str, result: dict, source_vintages: list[str], *, measure_id: str | None = None, region_id: str | None = None) -> str:
         snapshot_id = str(uuid.uuid4())
         with self.connect() as db:
-            db.execute("INSERT INTO indicator_results VALUES(?,?,?,?,?,?,?,?,?,?)", (snapshot_id, run_id, geography, indicator_id, period, result["calculated_at"], result["methodology_version"], result.get("config_version"), json.dumps(sorted(set(source_vintages))), json.dumps(result, sort_keys=True)))
+            db.execute(
+                "INSERT INTO indicator_results (id,sync_run_id,geography,indicator_id,measure_id,region_id,period,calculated_at,methodology_version,config_version,source_vintages,result_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                (snapshot_id, run_id, geography, indicator_id, measure_id, region_id, period, result["calculated_at"], result["methodology_version"], result.get("config_version"), json.dumps(sorted(set(source_vintages))), json.dumps(result, sort_keys=True)),
+            )
         return snapshot_id
 
-    def get_result(self, geography: str, indicator_id: str, period: str = "latest") -> dict[str, Any] | None:
-        where = "geography=? AND indicator_id=?"
-        params: list[Any] = [geography, indicator_id]
+    def get_result(self, geography: str, indicator_id: str, period: str = "latest", *, measure_id: str | None = None, region_id: str | None = None) -> dict[str, Any] | None:
+        # `headline_consumer_inflation` caches seven US measures side by
+        # side (source_registry.yaml); a caller that does not name one
+        # gets the primary CPI-U series, matching this indicator's single
+        # cached series before measures existed. Every other indicator has
+        # always had exactly one series, so its rows carry measure_id=NULL
+        # and an unset filter already resolves them correctly.
+        if measure_id is None and indicator_id == "headline_consumer_inflation":
+            measure_id = "cpi"
+        where = "geography=? AND indicator_id=? AND measure_id IS ? AND region_id IS ?"
+        params: list[Any] = [geography, indicator_id, measure_id, region_id]
         if period != "latest":
             where += " AND period=?"
             params.append(period)
@@ -158,9 +271,42 @@ class SnapshotStore:
         if row is None:
             return None
         item = dict(row)
-        item["result"] = json.loads(item.pop("result_json"))
-        item["source_vintages"] = json.loads(item["source_vintages"])
+        item["result"] = _safe_json_loads(item.pop("result_json"), column="result_json", row_id=item.get("id"))
+        item["source_vintages"] = _safe_json_loads(item["source_vintages"], column="source_vintages", row_id=item.get("id"))
         return item
+
+    def list_latest_results(self, geography: str, indicator_id: str, *, measure_id: Any = _UNSET, region_id: Any = _UNSET) -> list[dict[str, Any]]:
+        """Every distinct measure_id/region_id variant cached for this
+        geography/indicator, each at its own latest available period.
+
+        Used by the /measures and /regions read endpoints (app/api/data.py)
+        to list the seven US price measures, or the four census regions,
+        side by side -- ``get_result`` above answers "the one figure for
+        this period"; this answers "every figure currently on screen".
+        Pass ``measure_id``/``region_id`` to narrow to one dimension
+        (``None`` filters for that column being unset, not "don't care").
+        """
+
+        where = "geography=? AND indicator_id=?"
+        params: list[Any] = [geography, indicator_id]
+        if measure_id is not _UNSET:
+            where += " AND measure_id IS ?"
+            params.append(measure_id)
+        if region_id is not _UNSET:
+            where += " AND region_id IS ?"
+            params.append(region_id)
+        with self.connect() as db:
+            rows = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC, calculated_at DESC", params).fetchall()
+        latest: dict[tuple, dict] = {}
+        for row in rows:
+            key = (row["measure_id"], row["region_id"])
+            latest.setdefault(key, dict(row))
+        results = []
+        for item in latest.values():
+            item["result"] = _safe_json_loads(item.pop("result_json"), column="result_json", row_id=item.get("id"))
+            item["source_vintages"] = _safe_json_loads(item["source_vintages"], column="source_vintages", row_id=item.get("id"))
+            results.append(item)
+        return results
 
     def status(self) -> dict[str, Any]:
         with self.connect() as db:
@@ -174,7 +320,7 @@ class SnapshotStore:
         result = []
         for row in rows:
             item = dict(row)
-            item["details"] = json.loads(item.pop("details_json"))
+            item["details"] = _safe_json_loads(item.pop("details_json"), column="details_json", row_id=item.get("id"))
             result.append(item)
         return result
 

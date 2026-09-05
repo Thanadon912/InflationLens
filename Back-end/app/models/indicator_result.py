@@ -24,9 +24,11 @@ When an indicator has no defensible single headline number, ``value`` is
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from app.engines.shared.errors import DataQualityError
 from app.models.coverage import CoverageReport
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.methodology import InputProvenance
@@ -52,6 +54,11 @@ class Component:
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        if self.value is not None and not math.isfinite(self.value):
+            raise DataQualityError(
+                f"Component {self.key!r} value must be finite, got {self.value!r}",
+                key=self.key,
+            )
         if self.is_score and self.unit != Unit.STANDARD_DEVIATION_SCORE:
             raise ValueError(
                 f"Component {self.key!r} is marked is_score=True but unit is "
@@ -93,6 +100,13 @@ class IndicatorResult:
     metadata: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.value is not None and not math.isfinite(self.value):
+            raise DataQualityError(
+                f"IndicatorResult {self.indicator_id!r} value must be finite, got {self.value!r}",
+                indicator=self.indicator_id,
+                geography=self.geography,
+                period=self.period,
+            )
         if self.value is not None and self.unit is None:
             raise ValueError("IndicatorResult.unit is required whenever value is not None")
         if self.coverage == Coverage.UNAVAILABLE and self.value is not None:

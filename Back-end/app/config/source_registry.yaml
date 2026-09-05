@@ -9,8 +9,32 @@ defaults:
   cross_source_index_tolerance: 0.01
 
 sources:
-  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, provider: bls, series_id: CUUR0000SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  # ── Headline Consumer Inflation, USA: seven published measures ──
+  # `measure_id` is the ledger dimension the /measures/USA read endpoint
+  # groups on (app/data/service.py). All seven run through the existing
+  # headline_consumer engine's index-YoY path except `trim`, which the
+  # Dallas Fed publishes only as a rate (see the `is_rate` mapping below).
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, measure_code: "CPI-U", measure_name: "Headline CPI", measure_note: "All items, 12-month, NSA", provider: bls, series_id: CUUR0000SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
   - {geography: USA, indicator_id: headline_consumer_inflation, role: shadow_index, provider: fred, series_id: CPIAUCNS, frequency: monthly, unit: index, seasonally_adjusted: false, primary: false}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: core, measure_code: "Core CPI", measure_name: "CPI ex food & energy", measure_note: "The trend under food and energy swings", provider: bls, series_id: CUUR0000SA0L1E, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: ccpi, measure_code: "C-CPI-U", measure_name: "Chained CPI", measure_note: "Substitution-adjusted basket", provider: bls, series_id: SUUR0000SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: ppi, measure_code: "PPI", measure_name: "PPI final demand", measure_note: "Producer side, upstream of CPI", provider: bls, series_id: WPUFD4, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: pce, measure_code: "PCE", measure_name: "Headline PCE", measure_note: "Broadest consumption deflator", provider: fred, series_id: PCEPI, frequency: monthly, unit: index, seasonally_adjusted: true, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpce, measure_code: "Core PCE", measure_name: "PCE ex food & energy", measure_note: "The Fed's preferred gauge", provider: fred, series_id: PCEPILFE, frequency: monthly, unit: index, seasonally_adjusted: true, primary: true}
+  # Trimmed-mean PCE: Dallas Fed publishes a percent-change series, not an
+  # index. `is_rate: true` routes it around the index-YoY engine path in
+  # app/data/service.py -- it is stored and served as the publisher's own
+  # rate, never recomputed (README.md "Backend integration", point 1: keep
+  # the shape, replace the value).
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: trim, measure_code: "Trimmed", measure_name: "Trimmed-mean PCE", measure_note: "Outlier components clipped", provider: fred, series_id: PCETRIM12M159SFRBDAL, frequency: monthly, unit: percent_yoy, is_rate: true, seasonally_adjusted: true, primary: true}
+
+  # ── Regional CPI: the only sub-national series BLS publishes. States
+  # inherit their census region's published rate (app/config/us_regions.yaml)
+  # rather than an invented per-state figure. ──
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, region_id: Northeast, provider: bls, series_id: CUUR0100SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, region_id: Midwest, provider: bls, series_id: CUUR0200SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, region_id: South, provider: bls, series_id: CUUR0300SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
+  - {geography: USA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, region_id: West, provider: bls, series_id: CUUR0400SA0, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
   - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: food, provider: bls, series_id: CUUR0000SAF1, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
   - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: housing, provider: bls, series_id: CUUR0000SAH1, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
   - {geography: USA, indicator_id: essential_cost_inflation, role: category_index, component_id: energy, provider: bls, series_id: CUUR0000SA0E, frequency: monthly, unit: index, seasonally_adjusted: false, primary: true}
@@ -21,7 +45,7 @@ sources:
   - {geography: USA, indicator_id: economy_wide_inflation, role: nominal_gdp, provider: bea, series_id: "NIPA:T10105:1", dataset: NIPA, table: T10105, line: "1", frequency: quarterly, unit: local_currency, currency: USD, seasonally_adjusted: true, primary: true}
   - {geography: USA, indicator_id: economy_wide_inflation, role: real_gdp, provider: bea, series_id: "NIPA:T10106:1", dataset: NIPA, table: T10106, line: "1", frequency: quarterly, unit: local_currency, currency: USD, seasonally_adjusted: true, primary: true}
 
-  - {geography: EA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:TOTAL:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: TOTAL, geo: EA20}}
+  - {geography: EA, indicator_id: headline_consumer_inflation, role: all_items_cpi_index, measure_id: cpi, measure_code: "HICP", measure_name: "Headline HICP", provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:TOTAL:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: TOTAL, geo: EA20}}
   - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: food, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP01:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP01, geo: EA20}}
   - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: housing, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:CP041:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: CP041, geo: EA20}}
   - {geography: EA, indicator_id: essential_cost_inflation, role: category_index, component_id: energy, provider: eurostat, dataset: prc_hicp_minr, series_id: "prc_hicp_minr:M:I25:NRG:EA20", frequency: monthly, unit: index, seasonally_adjusted: false, primary: true, filters: {freq: M, unit: I25, coicop18: NRG, geo: EA20}}
@@ -34,3 +58,23 @@ sources:
 
   - {geography: USA, indicator_id: geography_metadata, role: population, provider: world_bank, series_id: SP.POP.TOTL, frequency: annual, unit: persons, primary: true}
   - {geography: EA, indicator_id: geography_metadata, role: population, provider: world_bank, series_id: SP.POP.TOTL, provider_geography: EMU, frequency: annual, unit: persons, primary: true}
+
+  # ── World cross-section: one point per economy, annual CPI inflation.
+  # `cross_section: true` tells _fetch_world_bank (app/providers/adapters.py)
+  # to derive one component_id per country from the response body instead
+  # of the mapping's fixed geography -- this is the only provider call that
+  # returns many countries at once. Feeds world.byIso (joined via
+  # app/config/iso_numeric.yaml) and median_country_inflation's
+  # country_rates role. Per docs/API_DATA_SOURCES_GUIDE.md section 7.1,
+  # "do not use annual World Bank CPI when current monthly official data
+  # exists" -- the /world/cross-section endpoint overlays USA and EA with
+  # the engine's own monthly headline_consumer_inflation result and marks
+  # those two entries with a different `basis`. ──
+  - {geography: GLOBAL, indicator_id: median_country_inflation, role: country_rates, provider: world_bank, series_id: FP.CPI.TOTL.ZG, provider_geography: all, cross_section: true, frequency: annual, unit: percent_yoy, primary: true}
+
+  # ── Context strip: FOMC / labor-market figures the workbench head block
+  # prints alongside the ledger. Pure passthrough -- no engine involved. ──
+  - {geography: USA, indicator_id: context_metadata, role: fed_target_upper, provider: fred, series_id: DFEDTARU, frequency: monthly, unit: percent, primary: true}
+  - {geography: USA, indicator_id: context_metadata, role: fed_funds_rate, provider: fred, series_id: FEDFUNDS, frequency: monthly, unit: percent, primary: true}
+  - {geography: USA, indicator_id: context_metadata, role: wage_growth, provider: fred, series_id: CES0500000003, frequency: monthly, unit: local_currency, currency: USD, primary: true}
+  - {geography: USA, indicator_id: context_metadata, role: unemployment_rate, provider: fred, series_id: UNRATE, frequency: monthly, unit: percent, primary: true}

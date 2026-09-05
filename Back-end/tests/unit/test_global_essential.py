@@ -1,6 +1,7 @@
 import pytest
 
 from app.engines.global_ import essential as ge
+from app.engines.shared.errors import InvalidWeightError
 
 CALCULATED_AT = "2026-08-02T12:00:00Z"
 
@@ -33,3 +34,24 @@ class TestGlobalEssential:
         weights = {"USA": 0.5, "EA": 0.5}
         result = ge.calculate(country_essential_rates=rates, consumption_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
         assert result.value == pytest.approx(0.0)
+
+
+class TestInvalidWeights:
+    def test_weights_not_summing_to_one_raises(self):
+        rates = {"USA": 4.0, "EA": 3.0}
+        weights = {"USA": 0.6, "EA": 0.6}
+        with pytest.raises(InvalidWeightError):
+            ge.calculate(country_essential_rates=rates, consumption_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_mismatched_keys_raises(self):
+        rates = {"USA": 4.0, "EA": 3.0}
+        weights = {"USA": 0.5, "THA": 0.5}
+        with pytest.raises(InvalidWeightError):
+            ge.calculate(country_essential_rates=rates, consumption_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT)
+
+    def test_population_weighted_alternative_with_bad_weights_raises(self):
+        rates = {"USA": 4.0, "EA": 3.0}
+        weights = {"USA": 0.6, "EA": 0.4}
+        bad_pop_weights = {"USA": 0.9, "EA": 0.9}
+        with pytest.raises(InvalidWeightError):
+            ge.calculate(country_essential_rates=rates, consumption_ppp_weights=weights, all_geographies=("USA", "EA"), period="p", calculated_at=CALCULATED_AT, population_weights=bad_pop_weights)

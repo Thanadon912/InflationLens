@@ -73,6 +73,43 @@ class TestStrictCountryContract:
         response = raw_client.post("/api/v1/country/USA/broad_money_expansion", json=payload)
         assert response.status_code == 422
 
+    def test_zero_money_current_is_422_not_500(self, raw_client):
+        payload = {
+            "period": "2026-06",
+            "inputs": {
+                "money_growth_percent": [obs("money_growth_percent", 8.0)],
+                "real_output_growth_percent": [obs("real_output_growth_percent", 3.0)],
+                "nominal_gdp_current": [obs("nominal_gdp_current", 26000.0, unit="local_currency")],
+                "nominal_gdp_prior": [obs("nominal_gdp_prior", 24500.0, "2025-06", unit="local_currency")],
+                "money_current": [obs("money_current", 0.0, unit="local_currency")],
+                "money_prior": [obs("money_prior", 20000.0, "2025-06", unit="local_currency")],
+            },
+        }
+        response = raw_client.post("/api/v1/country/USA/excess_money_growth", json=payload)
+        assert response.status_code != 500
+        assert response.status_code == 200
+        data = response.get_json()
+        assert not any(c["key"] == "velocity_adjusted_monetary_pressure" for c in data["components"])
+        assert any("velocity_adjusted_monetary_pressure unavailable" in w for w in data["warnings"])
+
+    def test_overflow_to_infinite_value_is_422_not_200(self, raw_client):
+        # Regression: two entirely finite, valid observations whose ratio
+        # overflows to inf must be a 422 domain error, not a 200 response
+        # carrying a bare `Infinity` literal (which breaks JSON.parse on
+        # every JS client, including the shipped frontend).
+        payload = {
+            "period": "2026-06",
+            "inputs": {
+                "all_items_cpi_index": [
+                    obs("all_items_cpi_index", 1e-308, "2025-06", unit="index"),
+                    obs("all_items_cpi_index", 1e308, "2026-06", unit="index"),
+                ],
+            },
+        }
+        response = raw_client.post("/api/v1/country/USA/headline_consumer_inflation", json=payload)
+        assert response.status_code == 422
+        assert response.get_json()["error"]["code"] == "DATA_QUALITY"
+
     def test_wrong_scalar_unit_is_rejected(self, raw_client):
         payload = {
             "period": "2026-06",

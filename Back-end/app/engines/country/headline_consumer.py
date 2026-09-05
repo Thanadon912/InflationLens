@@ -29,6 +29,7 @@ ACCEPTED_UNITS = (Unit.INDEX,)
 ACCEPTED_FREQUENCIES = (Frequency.MONTHLY, Frequency.QUARTERLY, Frequency.ANNUAL)
 
 _THREE_MONTH_HORIZON = 3
+_SIX_MONTH_HORIZON = 6
 
 
 def calculate(
@@ -78,11 +79,18 @@ def calculate(
     components.append(mom_component)
     used_observations.extend(mom_obs)
 
-    # Three-month annualized momentum -- only defined for monthly data.
+    # Three- and six-month annualized momentum -- only defined for monthly
+    # data. Six-month backs the workbench window rail's "6-month
+    # annualised" option alongside the existing three-month figure.
     if cpi_series.frequency == Frequency.MONTHLY:
         momentum_component, momentum_obs = _try_three_month_annualized(cpi_series, period, warnings)
         components.append(momentum_component)
         used_observations.extend(momentum_obs)
+        six_month_component, six_month_obs = _try_n_month_annualized(
+            cpi_series, period, warnings, horizon=_SIX_MONTH_HORIZON, key="six_month_annualized", label="Six-month annualized momentum"
+        )
+        components.append(six_month_component)
+        used_observations.extend(six_month_obs)
 
     confidence = derive_confidence(*used_observations)
     is_estimated = any(o.is_estimated for o in used_observations)
@@ -134,31 +142,17 @@ def _try_period_over_period(
 def _try_three_month_annualized(
     series: ObservationSeries, period: Period, warnings: list[str]
 ) -> tuple[Component, list]:
+    return _try_n_month_annualized(series, period, warnings, horizon=_THREE_MONTH_HORIZON, key="three_month_annualized", label="Three-month annualized momentum")
+
+
+def _try_n_month_annualized(
+    series: ObservationSeries, period: Period, warnings: list[str], *, horizon: int, key: str, label: str
+) -> tuple[Component, list]:
     try:
         current = require_observation_at(series, period, context=INDICATOR_ID)
-        prior_3m = require_lagged_observation(
-            series, period, _THREE_MONTH_HORIZON, context=f"{INDICATOR_ID}.three_month_annualized"
-        )
-        value = growth.n_period_annualized(
-            current.value, prior_3m.value, n=_THREE_MONTH_HORIZON, periods_per_year=12
-        )
-        return (
-            Component(
-                key="three_month_annualized",
-                label="Three-month annualized momentum",
-                value=value,
-                unit=Unit.PERCENT_ANNUALIZED,
-            ),
-            [prior_3m],
-        )
+        prior = require_lagged_observation(series, period, horizon, context=f"{INDICATOR_ID}.{key}")
+        value = growth.n_period_annualized(current.value, prior.value, n=horizon, periods_per_year=12)
+        return (Component(key=key, label=label, value=value, unit=Unit.PERCENT_ANNUALIZED), [prior])
     except EngineError as exc:
-        warnings.append(f"three_month_annualized unavailable: {exc.message}")
-        return (
-            Component(
-                key="three_month_annualized",
-                label="Three-month annualized momentum",
-                value=None,
-                unit=Unit.PERCENT_ANNUALIZED,
-            ),
-            [],
-        )
+        warnings.append(f"{key} unavailable: {exc.message}")
+        return (Component(key=key, label=label, value=None, unit=Unit.PERCENT_ANNUALIZED), [])

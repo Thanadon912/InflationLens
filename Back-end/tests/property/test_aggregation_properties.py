@@ -21,9 +21,28 @@ from app.engines.shared.aggregation import (
     weighted_median,
 )
 from app.engines.shared.coverage import renormalize_weights
+from app.engines.shared.errors import DataQualityError, InvalidWeightError
 
 finite_values = st.floats(min_value=-1e6, max_value=1e6, allow_nan=False, allow_infinity=False)
 positive_values = st.floats(min_value=1e-6, max_value=1e6, allow_nan=False, allow_infinity=False)
+
+# The strategies above only ever generate weight sets that sum to 1 by
+# construction (_weighted_case normalizes them). These target exactly the
+# weight shapes validate_weights (app/engines/shared/validation.py) exists
+# to reject -- without them, that guard is never property-tested.
+non_unit_sum_weights = st.dictionaries(
+    st.sampled_from(["a", "b", "c"]),
+    st.floats(min_value=0.1, max_value=5.0, allow_nan=False, allow_infinity=False),
+    min_size=1,
+    max_size=3,
+).filter(lambda w: abs(sum(w.values()) - 1.0) > 1e-6)
+
+negative_weights = st.dictionaries(
+    st.sampled_from(["a", "b", "c"]),
+    st.floats(min_value=-10.0, max_value=-0.01, allow_nan=False, allow_infinity=False),
+    min_size=1,
+    max_size=3,
+)
 
 
 def _weighted_case(n):
@@ -110,3 +129,22 @@ def test_renormalized_weights_sum_to_one(weights):
     available = list(weights.keys())[: max(1, len(weights) - 1)]
     result = renormalize_weights(weights, available)
     assert sum(result.values()) == pytest.approx(1.0, abs=1e-9)
+
+
+@given(weights=non_unit_sum_weights)
+def test_weights_not_summing_to_one_always_rejected(weights):
+    values = {k: 1.0 for k in weights}
+    with pytest.raises(InvalidWeightError):
+        weighted_arithmetic_mean(values, weights)
+
+
+@given(weights=negative_weights)
+def test_negative_weights_always_rejected(weights):
+    values = {k: 1.0 for k in weights}
+    with pytest.raises(InvalidWeightError):
+        weighted_arithmetic_mean(values, weights)
+
+
+def test_empty_unweighted_median_always_raises():
+    with pytest.raises(DataQualityError):
+        unweighted_median([])
