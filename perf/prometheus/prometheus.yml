@@ -1,0 +1,17 @@
+# Prometheus exists here purely as a sink for k6's remote-write output.
+# There are deliberately no scrape targets: nothing in this project
+# exposes a /metrics endpoint, and inventing one would mean shipping
+# production instrumentation for the sake of a load test.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+storage:
+  tsdb:
+    # k6 flushes thousands of series every 5s and the batches can arrive
+    # slightly out of order under load. Without a window, Prometheus
+    # rejects the late samples and the dashboard shows gaps that look
+    # like the API stopped responding.
+    out_of_order_time_window: 30m
+
+scrape_configs: []

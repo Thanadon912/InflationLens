@@ -1,0 +1,1650 @@
+{
+  "uid": "lens-qa-perf",
+  "title": "Inflation Lens \u2014 QA Performance",
+  "description": "Load-test results for the Inflation Lens API. Read it top to bottom: did the run pass, how did it behave over time, which endpoint is the problem, and what was actually run. Produced by perf/scripts/run.sh.",
+  "tags": [
+    "qa",
+    "performance",
+    "k6"
+  ],
+  "editable": false,
+  "graphTooltip": 1,
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m"
+    ]
+  },
+  "timezone": "browser",
+  "templating": {
+    "list": [
+      {
+        "name": "testid",
+        "label": "Test run",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "lens-perf-prometheus"
+        },
+        "definition": "label_values(k6_http_reqs_total, testid)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(k6_http_reqs_total, testid)",
+          "refId": "testid"
+        },
+        "refresh": 2,
+        "sort": 2,
+        "includeAll": false,
+        "multi": false,
+        "current": {},
+        "options": [],
+        "hide": 0,
+        "description": "Each run is tagged scenario-<UTC timestamp>. Newest first."
+      },
+      {
+        "name": "endpoint",
+        "label": "Endpoint",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "lens-perf-prometheus"
+        },
+        "definition": "label_values(k6_http_reqs_total{testid=\"$testid\"}, name)",
+        "query": {
+          "qryType": 1,
+          "query": "label_values(k6_http_reqs_total{testid=\"$testid\"}, name)",
+          "refId": "endpoint"
+        },
+        "refresh": 2,
+        "sort": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "options": [],
+        "hide": 0,
+        "description": "Narrows the two time-series panels above the fold \u2014 response time and failures \u2014 to specific endpoints. The summary tiles and the by-endpoint table always cover the whole run."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Verdict  \u2014  did this run pass?",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "SLO status",
+      "description": "Green only when every SLO held: error rate, checks, and the p95/p99 of both the read and calculate paths.\n\nRead strictly \u2014 it compares the *worst* 5-second window of the run, so a brief spike shows here even if the run-wide average passed. The authoritative verdict is k6's exit code (0 = pass, 99 = an SLO was breached), printed by perf/scripts/run.sh and recorded in the HTML report.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "FAIL",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "PASS",
+                  "color": "green",
+                  "index": 1
+                }
+              }
+            }
+          ],
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "NO RUN"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(((sum(max_over_time(k6_http_reqs_total{testid=\"$testid\",expected_response=\"false\"}[$__range])) or vector(0)) / sum(max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range])) < bool 0.01) * ((max(max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"read\"}[$__range])) < bool 0.1) or vector(1)) * ((max(max_over_time(k6_http_req_duration_p99{testid=\"$testid\",kind=\"read\"}[$__range])) < bool 0.15) or vector(1)) * ((max(max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"calc\"}[$__range])) < bool 0.06) or vector(1)) * ((max(max_over_time(k6_http_req_duration_p99{testid=\"$testid\",kind=\"calc\"}[$__range])) < bool 0.12) or vector(1)) * ((min(min_over_time(k6_checks_rate{testid=\"$testid\"}[$__range])) > bool 0.99) or vector(1)))",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Error rate",
+      "description": "Share of all requests that failed or returned an unexpected status. SLO: under 1%.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum(max_over_time(k6_http_reqs_total{testid=\"$testid\",expected_response=\"false\"}[$__range])) or vector(0)) / sum(max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range])) * 100",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Slowest read p95",
+      "description": "The worst p95 among the GET endpoints \u2014 not the blended p95 across all of them, which would hide one slow endpoint behind many fast ones.\n\nSLO: p95 under 100 ms. POST endpoints run a calculation engine and are held to a separate, looser SLO; see the SLO-budget panel below.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 10,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.1
+              },
+              {
+                "color": "red",
+                "value": 0.15
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"read\"}[$__range]))",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total requests",
+      "description": "Every HTTP request the run issued. A far lower number than usual means the run ended early.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 4,
+        "x": 15,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "none",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range]))",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Checks passed",
+      "description": "Content assertions, not status codes: the seven-measure US ledger, the cross-section covering 100+ economies, every dashboard indicator computing. Below 100% means a response was structurally wrong even if it returned 200 \u2014 see 'Failing checks' at the bottom for which one.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 5,
+        "x": 19,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 99.0
+              },
+              {
+                "color": "green",
+                "value": 99.999
+              }
+            ]
+          },
+          "mappings": [],
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "percentChangeColorMode": "standard"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min(min_over_time(k6_checks_rate{testid=\"$testid\"}[$__range])) * 100",
+          "refId": "A",
+          "range": false,
+          "instant": true
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "During the run  \u2014  how it behaved over time",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Response time by path",
+      "description": "read = GET endpoints serving the cached snapshot. calc = POST endpoints running a calculation engine, which are legitimately ~10x slower and have their own SLO.\n\nA line that climbs and never comes back down is the shape worth reporting; a single spike during ramp-up usually is not.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "calc p95"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "calc p99"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    10,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_http_req_duration_p95{testid=\"$testid\",name=~\"$endpoint\",kind=\"read\"}[1m]))",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "legendFormat": "read p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_http_req_duration_p99{testid=\"$testid\",name=~\"$endpoint\",kind=\"read\"}[1m]))",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "legendFormat": "read p99"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_http_req_duration_p95{testid=\"$testid\",name=~\"$endpoint\",kind=\"calc\"}[1m]))",
+          "refId": "C",
+          "range": true,
+          "instant": false,
+          "legendFormat": "calc p95"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_http_req_duration_p99{testid=\"$testid\",name=~\"$endpoint\",kind=\"calc\"}[1m]))",
+          "refId": "D",
+          "range": true,
+          "instant": false,
+          "legendFormat": "calc p99"
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Failures",
+      "description": "Failed requests per second, broken out by status code. `HTTP 0` is k6's code for a request that never got a response at all \u2014 a timeout or a refused connection \u2014 which is a different problem from a 500.\n\nA flat line at zero is the healthy case, not missing data.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 25,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (status) (rate(k6_http_reqs_total{testid=\"$testid\",name=~\"$endpoint\",status!~\"2..\"}[1m]))",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "legendFormat": "HTTP {{status}}"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "(sum(rate(k6_http_reqs_total{testid=\"$testid\",name=~\"$endpoint\",expected_response=\"false\"}[1m])) or vector(0))",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "legendFormat": "all failures"
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Load applied vs. throughput delivered",
+      "description": "The saturation panel. While the API keeps up, both lines rise together. The moment virtual users keep climbing and requests/sec flattens, the API has stopped scaling \u2014 that crossover point is the answer the stress scenario exists to produce.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "pointSize": 5,
+            "spanNulls": false,
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "axisColorMode": "text",
+            "axisBorderShow": false,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "requests/sec"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "reqps"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "virtual users"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "blue"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "mean",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc",
+          "hideZeros": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(max_over_time(k6_vus{testid=\"$testid\"}[1m]))",
+          "refId": "A",
+          "range": true,
+          "instant": false,
+          "legendFormat": "virtual users"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(k6_http_reqs_total{testid=\"$testid\"}[1m]))",
+          "refId": "B",
+          "range": true,
+          "instant": false,
+          "legendFormat": "requests/sec"
+        }
+      ],
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Where it hurts  \u2014  which endpoint to open a bug against",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "By endpoint",
+      "description": "One row per endpoint, worst first. 'SLO budget' is that endpoint's p95 as a share of the SLO it is actually held to, so the GET and POST paths are comparable on one scale: under 100% is within budget, over 100% has broken it.\n\nThis is the table to screenshot into a bug report.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 15,
+        "x": 0,
+        "y": 25
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (name) (max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range]))",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "((sum by (name) (max_over_time(k6_http_reqs_total{testid=\"$testid\",expected_response=\"false\"}[$__range]))) or (sum by (name) (max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range])) * 0)) / sum by (name) (max_over_time(k6_http_reqs_total{testid=\"$testid\"}[$__range])) * 100",
+          "refId": "B",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (name) (max_over_time(k6_http_req_duration_p95{testid=\"$testid\"}[$__range]))",
+          "refId": "C",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (name) (max_over_time(k6_http_req_duration_p99{testid=\"$testid\"}[$__range]))",
+          "refId": "D",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (name) (max_over_time(k6_http_req_duration_max{testid=\"$testid\"}[$__range]))",
+          "refId": "E",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (name) (max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"read\"}[$__range])) / 0.1 * 100 or max by (name) (max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"calc\"}[$__range])) / 0.06 * 100",
+          "refId": "F",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "name",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Time 6": true
+            },
+            "renameByName": {
+              "name": "Endpoint",
+              "Value #A": "Requests",
+              "Value #B": "Error %",
+              "Value #C": "p95",
+              "Value #D": "p99",
+              "Value #E": "Max",
+              "Value #F": "SLO budget"
+            },
+            "indexByName": {
+              "name": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "Value #E": 5,
+              "Value #F": 6
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false,
+            "filterable": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Endpoint"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Requests"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "p95|p99|Max"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "SLO budget"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 80
+                    },
+                    {
+                      "color": "red",
+                      "value": 100
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "SLO budget",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 13,
+      "type": "bargauge",
+      "title": "SLO budget used",
+      "description": "Each endpoint's p95 as a percentage of its own SLO. Everything left of the 100% mark is within budget; anything that crosses it broke the SLO and is what the run is reporting.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 9,
+        "x": 15,
+        "y": 25
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (name) (max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"read\"}[$__range])) / 0.1 * 100 or max by (name) (max_over_time(k6_http_req_duration_p95{testid=\"$testid\",kind=\"calc\"}[$__range])) / 0.06 * 100",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "legendFormat": "{{name}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Value",
+                "desc": true
+              }
+            ]
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 150,
+          "decimals": 0,
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 80
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          },
+          "noValue": "No run selected",
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "sizing": "auto",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        }
+      },
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Run context",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Failing checks",
+      "description": "Content assertions that did not hold for every request. Empty is the healthy state. A check here means a response was structurally wrong \u2014 an incomplete measure ledger, an indicator that came back unavailable \u2014 which is a correctness bug, not a slow one.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 13,
+        "x": 0,
+        "y": 37
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min by (check) (min_over_time(k6_checks_rate{testid=\"$testid\"}[$__range])) * 100 < 100",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "check": "Check",
+              "Value": "Passed"
+            },
+            "indexByName": {
+              "check": 0,
+              "Value": 1
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "All checks passed",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Check"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 420
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Passed"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background",
+                  "mode": "basic"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 99
+                    },
+                    {
+                      "color": "green",
+                      "value": 100
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Passed",
+            "desc": false
+          }
+        ]
+      },
+      "pluginVersion": "11.5.1"
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "What was run",
+      "description": "Which scenario, against which server and which commit, and how hard it pushed.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "lens-perf-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 11,
+        "x": 13,
+        "y": 37
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (scenario, server, commit) (max_over_time(k6_vus_max{testid=\"$testid\"}[$__range]))",
+          "refId": "A",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (scenario, server, commit) (max_over_time(k6_iterations_total{testid=\"$testid\"}[$__range]))",
+          "refId": "B",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "lens-perf-prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (scenario, server, commit) (max_over_time(k6_iteration_duration_p95{testid=\"$testid\"}[$__range]))",
+          "refId": "C",
+          "range": false,
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true
+            },
+            "renameByName": {
+              "scenario": "Scenario",
+              "server": "Server",
+              "commit": "Commit",
+              "Value #A": "Peak VUs",
+              "Value #B": "Iterations",
+              "Value #C": "Iteration p95"
+            },
+            "indexByName": {
+              "scenario": 0,
+              "server": 1,
+              "commit": 2,
+              "Value #A": 3,
+              "Value #B": 4,
+              "Value #C": 5
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "noValue": "No run selected",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Iteration p95"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "Peak VUs|Iterations"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "pluginVersion": "11.5.1"
+    }
+  ]
+}

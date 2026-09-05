@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: inflation-lens-perf
+    type: file
+    # The dashboard is a file in this repo, not something edited in the
+    # Grafana UI: `allowUiUpdates: false` makes that explicit, so an
+    # in-browser edit cannot silently become the version everyone sees
+    # while the committed JSON drifts out of date.
+    allowUiUpdates: false
+    disableDeletion: true
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

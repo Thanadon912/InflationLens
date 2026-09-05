@@ -1,0 +1,3 @@
+# Grafana probes for four provisioning directories at startup and logs an
+# error for each one missing. Nothing here provisions plugins; this file
+# only keeps that error out of the log a QA tester would be reading.

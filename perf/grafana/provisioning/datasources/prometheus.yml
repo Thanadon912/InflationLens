@@ -1,0 +1,16 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # Pinned so the dashboard JSON can reference the datasource by a
+    # stable uid instead of whatever Grafana generates on first boot.
+    uid: lens-perf-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      # Matches k6's default K6_PROMETHEUS_RW_PUSH_INTERVAL, so Grafana's
+      # automatic step never asks for a finer resolution than exists.
+      timeInterval: 5s
+      httpMethod: POST
