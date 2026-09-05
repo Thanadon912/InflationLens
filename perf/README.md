@@ -259,10 +259,12 @@ bytes, but its **think time is the lowest of all**, which is precisely what
 declared length, before anything parses it.
 
 The control is what makes this a finding rather than a coincidence.
-`TAIL=valid ./perf/scripts/run.sh abuse` reruns the identical harness with an
-ordinary request substituted for the refused one, and read latency does not
-meaningfully move (p95 11.03 ms vs 12.12 ms). Swapping abuse for legitimate
-traffic buys an attacker nothing.
+`TAIL=valid ./perf/scripts/run.sh abuse` reruns the identical harness — same
+VUs, same think time, same page load — with an ordinary request substituted for
+the refused one. Read p95 lands at **9.64 ms** against the refusal run's
+**10.04 ms**, a 4% difference on a measurement that varies by more than that
+between runs. Swapping abuse in for legitimate traffic buys an attacker
+nothing.
 
 None of which makes `abuse` a security test. It measures the *cost* of a
 refusal, not the API's ability to survive someone determined to send them: with

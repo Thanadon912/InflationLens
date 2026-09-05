@@ -37,6 +37,13 @@ jobs:
       - name: Install project and audit
         run: |
           python -m venv .venv
+          # pip itself is in scope. The runner image ships pip 25.0.1,
+          # which carries seven advisories of its own, and pip-audit
+          # rightly reports them -- an installer that resolves and
+          # executes package metadata is part of the supply chain, not
+          # exempt from it. Upgrading is the fix; suppressing would make
+          # this job lie about the first thing it found.
+          .venv/bin/pip install --upgrade pip
           .venv/bin/pip install -e '.[dev,perf,security]'
           .venv/bin/pip-audit --skip-editable
 
