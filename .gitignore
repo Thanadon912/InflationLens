@@ -14,3 +14,26 @@ instance/
 .env
 .env.*
 !.env.example
+
+# Front-end/ Playwright E2E
+node_modules/
+playwright-report/
+test-results/
+playwright/.cache/
+
+# perf/ k6 load tests -- reports are per-run artifacts, not source
+perf/reports/
+
+# Agent / editor tooling. These are per-machine working state, not part of
+# the project: .claude/ alone is 108 files of a vendored skill plus a
+# settings.local.json that only makes sense on this machine.
+.claude/
+.impeccable/
+.remember/
+
+# Markdown is tracked. There used to be a blanket `*.md` here with a single
+# `!README.md` escape, which silently swallowed every document the project
+# actually wants under version control -- docs/, perf/README.md and
+# Front-end/DESIGN_HANDOFF.md were all invisible to `git add`. Ignore the
+# scratch files by name instead, so a new document is tracked by default and
+# dropping one takes a deliberate line here.
