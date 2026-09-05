@@ -27,7 +27,7 @@ jobs:
         working-directory: Back-end
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -80,7 +80,7 @@ jobs:
         working-directory: Back-end
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       # `-ll` gates on medium and above. The four B608 hits in
