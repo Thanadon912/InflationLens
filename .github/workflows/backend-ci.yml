@@ -1,0 +1,35 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths:
+      - "Back-end/**"
+      - ".github/workflows/backend-ci.yml"
+
+jobs:
+  test:
+    name: pytest (coverage-gated)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Back-end
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[dev]'
+
+      # `-m "not live"` is already the default via pyproject.toml's addopts,
+      # so this is exactly what a plain `pytest --cov=app ...` does locally.
+      # The 97% coverage gate ([tool.coverage.report] fail_under) applies
+      # automatically because --cov is passed here.
+      - name: Run tests with coverage gate
+        run: .venv/bin/python -m pytest -q --cov=app --cov-branch --cov-report=term-missing

@@ -1,0 +1,59 @@
+name: Performance smoke
+
+# Deliberately NOT run on every pull request.
+#
+# GitHub's shared runners vary enough in CPU and I/O that a latency SLO
+# measured on them says more about which machine the job landed on than
+# about the code. Enforcing p95 here would produce a flaky red X that
+# people learn to ignore, which is worse than not measuring at all.
+#
+# So this job checks only what a runner *can* answer reliably: does every
+# endpoint still work under a real load harness, do all the content
+# assertions hold, and do the POST bodies still satisfy the calculation
+# contract. Latency SLOs are judged from a local `./perf/scripts/run.sh
+# load` on known hardware -- see perf/README.md.
+on:
+  workflow_dispatch:
+  schedule:
+    # Monday 06:00 UTC. Catches contract drift that no PR happened to touch.
+    - cron: "0 6 * * 1"
+
+jobs:
+  smoke:
+    name: k6 smoke (correctness under load)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend with the perf extra
+        working-directory: Back-end
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[perf]'
+
+      - name: Install k6
+        run: |
+          sudo gpg --no-default-keyring \
+            --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+            --keyserver hkp://keyserver.ubuntu.com:80 \
+            --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+            | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+
+      # --no-prom: no Docker stack in CI. The standalone HTML report is
+      # the artifact, and k6's exit code is the gate.
+      - name: Run smoke scenario
+        run: ./perf/scripts/run.sh smoke --no-prom
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: k6-smoke-report
+          path: perf/reports/
+          retention-days: 14

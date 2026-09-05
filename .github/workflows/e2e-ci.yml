@@ -1,0 +1,55 @@
+name: E2E (Playwright)
+
+# Exercises Front-end/ against a real running Flask API -- the layer
+# neither the backend's own pytest suite nor a design review can cover,
+# since nothing in that suite ever loads data.js or the HTML that
+# consumes it. Uses a small deterministic seeded SQLite cache
+# (Back-end/scripts/seed_e2e_db.py), never a live `data sync`.
+on:
+  push:
+    branches: [master]
+  pull_request:
+    paths:
+      - "Front-end/**"
+      - "Back-end/**"
+      - ".github/workflows/e2e-ci.yml"
+
+jobs:
+  e2e:
+    name: playwright test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend
+        working-directory: Back-end
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[dev]'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend E2E dependencies
+        working-directory: Front-end
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: Front-end
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        working-directory: Front-end
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: Front-end/playwright-report/
+          retention-days: 14
