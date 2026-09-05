@@ -1,0 +1,13 @@
+{
+  "name": "inflation-lens-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "description": "E2E tests for the static Inflation Lens frontend against the real Flask API.",
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}
