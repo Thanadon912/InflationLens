@@ -1,0 +1,22 @@
+# Dependency updates. The security workflow reports a vulnerable package;
+# this is what actually replaces it, and it covers the ecosystem the
+# workflow cannot audit at all -- the pinned action versions in
+# .github/workflows, which are as much a supply chain as pip or npm.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /Back-end
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /Front-end
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

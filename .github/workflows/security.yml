@@ -1,0 +1,96 @@
+name: Security
+
+# Four scans, each answering a question the other three cannot.
+#
+# Deliberately not CodeQL. This repository is private, where CodeQL needs
+# GitHub Advanced Security, and the gitleaks *action* likewise needs a
+# licence key for private repos. Both would sit permanently red or
+# permanently skipped, which is worse than an honest smaller gate -- so
+# the SAST layer is bandit and the secret scan is the gitleaks OSS
+# container, neither of which depends on the plan the repo is on.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  schedule:
+    # Monday 05:00 UTC, an hour before the live-provider smoke. Advisories
+    # are published against dependencies that have not changed, so this has
+    # to run on a clock and not only when someone touches the code.
+    - cron: "0 5 * * 1"
+
+jobs:
+  python-deps:
+    name: pip-audit (known CVEs)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Back-end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Audits the resolved environment, not the manifest. pyproject.toml
+      # pins open ranges (`flask>=3.0`) and there is no lockfile, so what
+      # actually gets installed is the only thing worth auditing.
+      - name: Install project and audit
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[dev,perf,security]'
+          .venv/bin/pip-audit --skip-editable
+
+  node-deps:
+    name: npm audit (frontend)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Front-end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # `--audit-level=high` on purpose: the only dependency here is the
+      # Playwright test runner, which never ships to a user. A moderate
+      # advisory in a devDependency is worth knowing about, not worth
+      # blocking a merge on.
+      - run: npm audit --audit-level=high
+
+  secrets:
+    name: gitleaks (whole history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Scanning the working tree only would miss the case that
+          # actually matters: a credential committed once and deleted in
+          # the next commit is still in the history and still leaked.
+          fetch-depth: 0
+      - name: Scan
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            detect --source /repo --redact --no-banner --verbose
+
+  sast:
+    name: bandit (application code)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Back-end
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # `-ll` gates on medium and above. The four B608 hits in
+      # app/data/store.py are reviewed and marked `# nosec B608` at the
+      # line, with the reason above it -- every one interpolates only
+      # string literals into SQL and binds every caller value through
+      # `params`. Keeping the gate at medium rather than high is what
+      # makes a *new* medium finding fail this job.
+      - name: Install and scan
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e '.[security]'
+          .venv/bin/bandit -q -r app -ll

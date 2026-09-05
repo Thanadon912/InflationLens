@@ -206,7 +206,9 @@ class SnapshotStore:
             where += " AND role=?"
             params.append(role)
         with self.connect() as db:
-            rows = db.execute(f"SELECT * FROM normalized_observations WHERE {where} ORDER BY retrieved_at DESC, rowid DESC", params).fetchall()
+            # Reviewed (bandit B608): `where` above is assembled from string literals carrying
+            # only `?` placeholders -- every caller-supplied value binds through `params`.
+            rows = db.execute(f"SELECT * FROM normalized_observations WHERE {where} ORDER BY retrieved_at DESC, rowid DESC", params).fetchall()  # nosec B608
         latest: dict[tuple, dict] = {}
         for row in rows:
             item = dict(row)
@@ -267,7 +269,8 @@ class SnapshotStore:
             where += " AND period=?"
             params.append(period)
         with self.connect() as db:
-            row = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC,calculated_at DESC LIMIT 1", params).fetchone()
+            # Reviewed (bandit B608): `where` above is literals only; values bind through `params`.
+            row = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC,calculated_at DESC LIMIT 1", params).fetchone()  # nosec B608
         if row is None:
             return None
         item = dict(row)
@@ -296,7 +299,8 @@ class SnapshotStore:
             where += " AND region_id IS ?"
             params.append(region_id)
         with self.connect() as db:
-            rows = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC, calculated_at DESC", params).fetchall()
+            # Reviewed (bandit B608): `where` above is literals only; values bind through `params`.
+            rows = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC, calculated_at DESC", params).fetchall()  # nosec B608
         latest: dict[tuple, dict] = {}
         for row in rows:
             key = (row["measure_id"], row["region_id"])
@@ -311,7 +315,8 @@ class SnapshotStore:
     def status(self) -> dict[str, Any]:
         with self.connect() as db:
             run = db.execute("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT 1").fetchone()
-            counts = {name: db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] for name in ("raw_responses", "normalized_observations", "indicator_results", "sync_issues")}
+            # Reviewed (bandit B608): the table names are the hardcoded tuple on the next line, never caller input.
+            counts = {name: db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] for name in ("raw_responses", "normalized_observations", "indicator_results", "sync_issues")}  # nosec B608
         return {"database": self.path.name, "latest_run": dict(run) if run else None, "counts": counts}
 
     def issues(self, run_id: str | None = None) -> list[dict[str, Any]]:
