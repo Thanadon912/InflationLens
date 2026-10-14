@@ -134,12 +134,12 @@ def _safe_call(fn, *, indicator_id: str, geography: str, methodology_version: st
             method="unavailable",
             methodology_version=methodology_version,
             calculated_at=now_iso(),
-            reason=f"calculation failed: {message}",
+            reason=f"calculation failed: {message}"
         )
 
 
 def _calculate_country(handler, geography: str, indicator_id: str, body: dict, profile: dict) -> IndicatorResult:
-    normalized = normalize_request(indicator_id, body, global_scope=False)
+    normalized = normalize_request(indicator_id, body)
     result = handler(geography, normalized.legacy, profile)
     versions = load_methodology_versions()
     return _enrich_result(result, normalized, methodology_version=versions["country"][indicator_id], config_version=profile["profile_version"])

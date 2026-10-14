@@ -25,7 +25,7 @@ from app.engines.country import (
     housing,
     producer_import,
     purchasing_power,
-    underlying,
+    underlying
 )
 from app.engines.shared.periods import parse_period
 from app.models.enums import Frequency
