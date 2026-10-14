@@ -159,7 +159,7 @@ def normalize_request(
     indicator_id: str,
     body: Mapping[str, Any],
     *,
-    global_scope: bool,
+    global_scope: bool = False,
     structurally_dominant_weight: float | None = None,
 ) -> NormalizedPayload:
     if not isinstance(body, Mapping):
