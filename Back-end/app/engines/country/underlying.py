@@ -91,7 +91,7 @@ def calculate(
             boundary_handling=config.trim_boundary_handling,
         )[0],
         "trimmed_mean",
-        warnings,
+        warnings
     )
     values["official_core"] = _safe(
         lambda: _core_exclusion(component_rates, component_weights, config.excluded_categories)

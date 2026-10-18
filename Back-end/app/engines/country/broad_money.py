@@ -11,6 +11,7 @@ consumer-price inflation rate -- COUNTRY guidelines section 9.8: "Use
 """
 
 from __future__ import annotations
+import copy
 
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.errors import DataQualityError
@@ -51,10 +52,10 @@ def calculate(
 
     components: list[Component] = []
     warnings: list[str] = []
-
-    if population_current is not None and population_prior_year is not None:
-        if population_current <= 0 or population_prior_year <= 0:
-            raise DataQualityError("Population levels must be positive for per-capita money growth")
+    result = validate_population(population_current=population_current,
+                                 population_prior_year=population_prior_year,
+                                 warnings=warnings)
+    if result is None:
         per_capita_current = money_current / population_current
         per_capita_prior = money_prior_year / population_prior_year
         per_capita_growth = year_over_year(per_capita_current, per_capita_prior)
@@ -67,11 +68,12 @@ def calculate(
             )
         )
     else:
-        warnings.append(f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)")
+        warnings = result
 
-    if real_gdp_current is not None and real_gdp_prior_year is not None:
-        if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
-            raise DataQualityError("Real GDP levels must be positive for money/output calculations")
+    result = validate_real_gdp(real_gdp_prior_year=real_gdp_prior_year,
+                               real_gdp_current=real_gdp_current,
+                               warnings=warnings)
+    if result is None:
         ratio_current = money_current / real_gdp_current
         components.append(
             Component(
@@ -91,7 +93,7 @@ def calculate(
             )
         )
     else:
-        warnings.append(f"{INDICATOR_ID}: money_to_real_output_ratio unavailable (missing real GDP data)")
+        warnings = result
 
     confidence = derive_confidence(*source_observations) if source_observations else Confidence.HIGH
     is_estimated = any(o.is_estimated for o in source_observations)
@@ -114,3 +116,21 @@ def calculate(
         config_version=config_version,
         metadata={"label": LABEL, "aggregate_name": aggregate_name},
     )
+
+def validate_population(population_current, population_prior_year, warnings):
+    warnings = copy.deepcopy(warnings)
+    if population_current is not None and population_prior_year is not None:
+        if population_current <= 0 or population_prior_year <= 0:
+            raise DataQualityError("Population levels must be positive for per-capita money growth")
+        return None
+    warnings.append(f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)")
+    return warnings
+
+def validate_real_gdp(real_gdp_current, real_gdp_prior_year, warnings):
+    warnings = copy.deepcopy(warnings)
+    if real_gdp_current is not None and real_gdp_prior_year is not None:
+        if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
+            raise DataQualityError("Real GDP levels must be positive for money/output calculations")
+        return None
+    warnings.append(f"{INDICATOR_ID}: money_to_real_output_ratio unavailable (missing real GDP data)")
+    return warnings

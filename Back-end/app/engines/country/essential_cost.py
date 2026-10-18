@@ -62,16 +62,11 @@ def calculate_from_rates(
     (COUNTRY guidelines section 6.3 validation: "missing categories
     require coverage reporting").
     """
+    
+    result = validate_category(config_categories=config.categories, category_rates=category_rates)
+    provided = result.get('provided')
 
-    required = set(config.categories)
-    provided = set(category_rates) & required
-    if not provided:
-        raise MissingRequiredInputError(
-            f"{INDICATOR_ID}: none of the configured essential categories are present in input",
-            required_categories=sorted(required),
-        )
-
-    missing = required - provided
+    missing = result.get('missing')
     warnings: list[str] = []
     weights_renormalized = bool(missing)
 
@@ -132,6 +127,17 @@ def calculate_from_rates(
         },
     )
 
+def validate_category(category_rates, config_categories) -> dict:
+    required = set(config_categories)
+    provided = set(category_rates) & required
+    if not provided:
+        raise MissingRequiredInputError(
+            f"{INDICATOR_ID}: none of the configured essential categories are present in input",
+            required_categories=sorted(required),
+        )
+
+    missing = required - provided
+    return dict(missing=missing, provided=provided)
 
 def essential_cost_index(
     prices_current: Mapping[str, float],

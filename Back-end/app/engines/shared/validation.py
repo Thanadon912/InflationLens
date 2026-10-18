@@ -123,6 +123,8 @@ def require_observation_at(series: ObservationSeries, period: Period, *, context
         raise MissingRequiredInputError(
             f"{context}: no observation for period {period.raw!r}", context=context, period=period.raw
         )
+    
+    validate_positive_index(obs.value, context=context)
     return obs
 
 
@@ -145,4 +147,6 @@ def require_lagged_observation(
             required_period=target.raw,
             lag=lag,
         )
+    
+    validate_positive_index(obs.value, context=context)
     return obs
