@@ -300,6 +300,20 @@ def trimmed_mean(
         )
     return weighted_sum / retained_weight, tuple(retained_keys)
 
+def _resolve_laspeyres_keys(
+        prices_current: Mapping[str, float],
+        prices_base: Mapping[str, float],
+        quantities_base: Mapping[str, float]
+):
+    keys = set(prices_current) & set(prices_base) & set(quantities_base)
+    all_keys = set(prices_current) | set(prices_base) | set(quantities_base)
+    if not keys or keys != all_keys:
+        raise DataQualityError(
+            "laspeyres_price_index: prices_current, prices_base, and quantities_base "
+            "must all cover exactly the same items",
+            missing_or_mismatched=sorted(all_keys - keys),
+        )
+    return keys
 
 def laspeyres_price_index(
     prices_current: Mapping[str, float],
@@ -317,14 +331,7 @@ def laspeyres_price_index(
     tested implementation instead of two copies.
     """
 
-    keys = set(prices_current) & set(prices_base) & set(quantities_base)
-    all_keys = set(prices_current) | set(prices_base) | set(quantities_base)
-    if not keys or keys != all_keys:
-        raise DataQualityError(
-            "laspeyres_price_index: prices_current, prices_base, and quantities_base "
-            "must all cover exactly the same items",
-            missing_or_mismatched=sorted(all_keys - keys),
-        )
+    keys = _resolve_laspeyres_keys(prices_current, prices_base, quantities_base)
     numerator = sum(prices_current[k] * quantities_base[k] for k in keys)
     denominator = sum(prices_base[k] * quantities_base[k] for k in keys)
     if denominator <= 0:
