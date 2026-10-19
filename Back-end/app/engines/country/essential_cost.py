@@ -63,10 +63,8 @@ def calculate_from_rates(
     require coverage reporting").
     """
     
-    result = validate_category(config_categories=config.categories, category_rates=category_rates)
-    provided = result.get('provided')
+    missing, provided = resolve_essential_categories(config_categories=config.categories, category_rates=category_rates)
 
-    missing = result.get('missing')
     warnings: list[str] = []
     weights_renormalized = bool(missing)
 
@@ -75,12 +73,7 @@ def calculate_from_rates(
         available_weight = sum(config.categories[k] for k in provided)
         coverage_pct = (available_weight / total_weight) * 100 if total_weight > 0 else 0.0
         check_coverage_threshold(coverage_pct, config.min_coverage_percent, context=INDICATOR_ID)
-        if max((config.categories[k] for k in missing), default=0.0) >= config.structurally_dominant_weight:
-            from app.engines.shared.errors import CoverageThresholdError
-            raise CoverageThresholdError(
-                f"{INDICATOR_ID}: a structurally dominant category is missing",
-                missing_categories=sorted(missing),
-            )
+        validate_no_missing_dominant_category(config=config, missing=missing)
         weights = renormalize_weights(config.categories, provided)
         warnings.append(
             f"{INDICATOR_ID}: categories missing from input, weights renormalized: "
@@ -127,17 +120,35 @@ def calculate_from_rates(
         },
     )
 
-def validate_category(category_rates, config_categories) -> dict:
+def resolve_essential_categories(
+        category_rates:Mapping[str, float],
+        config_categories: Mapping[str, float],
+        indicator_id: str = INDICATOR_ID
+) -> tuple[set[str], set[str]]:
+
     required = set(config_categories)
     provided = set(category_rates) & required
     if not provided:
         raise MissingRequiredInputError(
-            f"{INDICATOR_ID}: none of the configured essential categories are present in input",
+            f"{indicator_id}: none of the configured essential categories are present in input",
             required_categories=sorted(required),
         )
 
     missing = required - provided
-    return dict(missing=missing, provided=provided)
+    return missing, provided
+
+def validate_no_missing_dominant_category(
+        config: EssentialBasketConfig,
+        missing: set
+) -> None:
+    
+    max_missing_weight = max((config.categories[k] for k in missing), default=0.0)
+    if max_missing_weight >= config.structurally_dominant_weight:
+        from app.engines.shared.errors import CoverageThresholdError
+        raise CoverageThresholdError(
+            f"{INDICATOR_ID}: a structurally dominant category is missing",
+            missing_categories=sorted(missing),
+        )
 
 def essential_cost_index(
     prices_current: Mapping[str, float],
