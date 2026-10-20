@@ -34,7 +34,7 @@ from app.models.indicator_result import IndicatorResult
 Handler = Callable[[str, dict, dict], IndicatorResult]
 
 
-def _handle_headline_consumer(geo: str, body: dict, profile: dict) -> IndicatorResult:
+def _handle_headline_consumer(geo: str, body: dict) -> IndicatorResult:
     series = parse_observation_series(require(body, "observations"))
     if series.geography != geo:
         raise SchemaError(f"observations geography {series.geography!r} does not match path geography {geo!r}")

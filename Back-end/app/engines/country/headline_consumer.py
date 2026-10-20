@@ -51,7 +51,7 @@ def calculate(
     computed).
     """
 
-    validate_unit_input(cpi_series=cpi_series, indicator_id=INDICATOR_ID)
+    validate_unit_input(cpi_series)
     current = require_observation_at(cpi_series, period, context=INDICATOR_ID)
 
     lag = yoy_lag(cpi_series.frequency)
@@ -71,12 +71,14 @@ def calculate(
     # Three- and six-month annualized momentum -- only defined for monthly
     # data. Six-month backs the workbench window rail's "6-month
     # annualised" option alongside the existing three-month figure.
-    calc_results = calculate_for_monthly(cpi_series=cpi_series, period=period,
-                                        components=components, warnings=warnings,
-                                        used_observations=used_observations)
-    components = calc_results['components']
-    used_observations = calc_results['used_observations']
-    warnings = calc_results['warnings']
+    comps, used_observs, warns = calculate_for_monthly(cpi_series, period)
+
+    if comps:
+        components.extend(comps)
+    if used_observs:
+        used_observations.extend(used_observs)
+    if warns:
+        warnings.extend(warns)
 
     confidence = derive_confidence(*used_observations)
     is_estimated = any(o.is_estimated for o in used_observations)
@@ -143,7 +145,7 @@ def _try_n_month_annualized(
         return (Component(key=key, label=label, value=None, unit=Unit.PERCENT_ANNUALIZED), [])
 
 
-def validate_unit_input(cpi_series, indicator_id):
+def validate_unit_input(cpi_series: ObservationSeries, indicator_id: str = INDICATOR_ID):
     validate_unit(cpi_series.unit, ACCEPTED_UNITS, indicator_id=indicator_id)
     if cpi_series.frequency not in ACCEPTED_FREQUENCIES:
         from app.engines.shared.errors import FrequencyMismatchError
@@ -154,10 +156,13 @@ def validate_unit_input(cpi_series, indicator_id):
             indicator=INDICATOR_ID,
         )
 
-def calculate_for_monthly(cpi_series, period, warnings, components, used_observations) -> dict:
-    components = copy.deepcopy(components)
-    warnings = copy.deepcopy(warnings)
-    used_observations = copy.deepcopy(used_observations)
+def calculate_for_monthly(
+        cpi_series: ObservationSeries,
+        period: Period,
+) -> tuple[list[Component], list, list[str]]:
+    used_observations: list = []
+    components: list[Component] = []
+    warnings: list[str] = []
     if cpi_series.frequency == Frequency.MONTHLY:
         momentum_component, momentum_obs = _try_three_month_annualized(cpi_series, period, warnings)
         components.append(momentum_component)
@@ -168,4 +173,4 @@ def calculate_for_monthly(cpi_series, period, warnings, components, used_observa
         components.append(six_month_component)
         used_observations.extend(six_month_obs)
 
-    return dict(components=components, used_observations=used_observations, warnings=warnings)
+    return components, used_observations, warnings
