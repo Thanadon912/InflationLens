@@ -36,7 +36,6 @@ _ANNUAL_RE = re.compile(r"^(?P<year>\d{4})$")
 _DAILY_RE = re.compile(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})$")
 _WEEKLY_RE = re.compile(r"^(?P<year>\d{4})-W(?P<week>\d{2})$")
 
-
 @dataclass(frozen=True, order=True)
 class Period:
     """A single, frequency-aware economic period.
@@ -55,102 +54,126 @@ class Period:
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.raw
 
-    def shift(self, steps: int) -> "Period":
-        """Return the period ``steps`` native periods away (may be negative)."""
+    def _shift_monthly(self, steps: int) -> Period:
+        year, month = divmod(self.sort_key, 12)
+        total = year * 12 + month + steps
+        year, month = divmod(total, 12)
+        return Period(sort_key=total, frequency=self.frequency, raw=f"{year:04d}-{month + 1:02d}")
 
-        if self.frequency == Frequency.MONTHLY:
-            year, month = divmod(self.sort_key, 12)
-            total = year * 12 + month + steps
-            year, month = divmod(total, 12)
-            return Period(sort_key=total, frequency=self.frequency, raw=f"{year:04d}-{month + 1:02d}")
-        if self.frequency == Frequency.QUARTERLY:
-            total = self.sort_key + steps
-            year, quarter = divmod(total, 4)
-            return Period(sort_key=total, frequency=self.frequency, raw=f"{year:04d}-Q{quarter + 1}")
-        if self.frequency == Frequency.ANNUAL:
-            total = self.sort_key + steps
-            return Period(sort_key=total, frequency=self.frequency, raw=f"{total:04d}")
-        if self.frequency == Frequency.DAILY:
-            d = date.fromordinal(self.sort_key) + timedelta(days=steps)
-            return Period(sort_key=d.toordinal(), frequency=self.frequency, raw=d.isoformat())
-        if self.frequency == Frequency.WEEKLY:
-            d = date.fromordinal(self.sort_key) + timedelta(weeks=steps)
-            iso_year, iso_week, _ = d.isocalendar()
-            monday = date.fromisocalendar(iso_year, iso_week, 1)
-            return Period(
-                sort_key=monday.toordinal(),
-                frequency=self.frequency,
-                raw=f"{iso_year:04d}-W{iso_week:02d}",
-            )
-        raise UnsupportedMethodError(  # pragma: no cover - defensive, all enum members handled above
-            method=str(self.frequency), context="Period.shift"
+    def _shift_quarterly(self, steps: int) -> Period:
+        total = self.sort_key + steps
+        year, quarter = divmod(total, 4)
+        return Period(sort_key=total, frequency=self.frequency, raw=f"{year:04d}-Q{quarter + 1}")
+
+    def _shift_annual(self, steps: int) -> Period:
+        total = self.sort_key + steps
+        return Period(sort_key=total, frequency=self.frequency, raw=f"{total:04d}")
+
+    def _shift_daily(self, steps: int) -> Period:
+        d = date.fromordinal(self.sort_key) + timedelta(days=steps)
+        return Period(sort_key=d.toordinal(), frequency=self.frequency, raw=d.isoformat())
+
+    def _shift_weekly(self, steps: int) -> Period:
+        d = date.fromordinal(self.sort_key) + timedelta(weeks=steps)
+        iso_year, iso_week, _ = d.isocalendar()
+        monday = date.fromisocalendar(iso_year, iso_week, 1)
+        return Period(
+            sort_key=monday.toordinal(),
+            frequency=self.frequency,
+            raw=f"{iso_year:04d}-W{iso_week:02d}",
         )
 
+    _SHIFTER = {
+        Frequency.MONTHLY: _shift_monthly,
+        Frequency.QUARTERLY: _shift_quarterly,
+        Frequency.ANNUAL: _shift_annual,
+        Frequency.DAILY: _shift_daily,
+        Frequency.WEEKLY: _shift_weekly,
+    }
+
+    def shift(self, steps: int) -> "Period":
+        """Return the period ``steps`` native periods away (may be negative)."""
+        shifter = self._SHIFTER.get(self.frequency)
+        if not shifter:
+            raise UnsupportedMethodError(  # pragma: no cover - defensive, all enum members handled above
+                method=str(self.frequency), context="Period.shift"
+            )
+        return shifter(self, steps)
+
+def _parse_period_monthly(raw: str, frequency: Frequency = Frequency.MONTHLY) -> Period:
+    m = _MONTHLY_RE.match(raw)
+    if not m:
+        raise SeriesDefinitionError(
+            message=f"Expected monthly period 'YYYY-MM', received {raw!r}"
+        )
+    year, month = int(m["year"]), int(m["month"])
+    if not 1 <= month <= 12:
+        raise SeriesDefinitionError(message=f"Invalid month in period {raw!r}")
+    return Period(sort_key=year * 12 + (month - 1), frequency=frequency, raw=raw)
+
+def _parse_period_quarterly(raw: str, frequency: Frequency = Frequency.QUARTERLY) -> Period:
+    m = _QUARTERLY_RE.match(raw)
+    if not m:
+        raise SeriesDefinitionError(
+            message=f"Expected quarterly period 'YYYY-Qn', received {raw!r}"
+        )
+    year, quarter = int(m["year"]), int(m["quarter"])
+    return Period(sort_key=year * 4 + (quarter - 1), frequency=frequency, raw=raw)
+
+def _parse_period_annual(raw: str, frequency: Frequency = Frequency.ANNUAL) -> Period:
+    m = _ANNUAL_RE.match(raw)
+    if not m:
+        raise SeriesDefinitionError(
+            message=f"Expected annual period 'YYYY', received {raw!r}"
+        )
+    year = int(m["year"])
+    return Period(sort_key=year, frequency=frequency, raw=raw)
+
+def _parse_period_daily(raw: str, frequency: Frequency = Frequency.DAILY) -> Period:
+    m = _DAILY_RE.match(raw)
+    if not m:
+        raise SeriesDefinitionError(
+            message=f"Expected daily period 'YYYY-MM-DD', received {raw!r}"
+        )
+    try:
+        d = date(int(m["year"]), int(m["month"]), int(m["day"]))
+    except ValueError as exc:
+        raise SeriesDefinitionError(message=f"Invalid calendar date in period {raw!r}") from exc
+    return Period(sort_key=d.toordinal(), frequency=frequency, raw=raw)
+
+def _parse_period_weekly(raw: str, frequency: Frequency = Frequency.WEEKLY) -> Period:
+    m = _WEEKLY_RE.match(raw)
+    if not m:
+        raise SeriesDefinitionError(
+            message=f"Expected ISO weekly period 'YYYY-Www', received {raw!r}"
+        )
+    year, week = int(m["year"]), int(m["week"])
+    try:
+        monday = date.fromisocalendar(year, week, 1)
+    except ValueError as exc:
+        raise SeriesDefinitionError(message=f"Invalid ISO week in period {raw!r}") from exc
+    return Period(sort_key=monday.toordinal(), frequency=frequency, raw=raw)
+
+_PERIOD_PARSER = {
+    Frequency.MONTHLY: _parse_period_monthly,
+    Frequency.QUARTERLY: _parse_period_quarterly,
+    Frequency.ANNUAL: _parse_period_annual,
+    Frequency.DAILY: _parse_period_daily,
+    Frequency.WEEKLY: _parse_period_weekly,
+}
 
 def parse_period(raw: str, frequency: Frequency) -> Period:
     """Parse ``raw`` as a period of the given frequency.
-
     Raises ``SeriesDefinitionError`` if ``raw`` does not match the expected
     format for ``frequency``. No silent coercion between formats is
     performed, matching the "no silent conversions" rule in
     CALCULATION_ENGINE_GUIDELINES.md section 5.3.
     """
-
-    if frequency == Frequency.MONTHLY:
-        m = _MONTHLY_RE.match(raw)
-        if not m:
-            raise SeriesDefinitionError(
-                message=f"Expected monthly period 'YYYY-MM', received {raw!r}"
-            )
-        year, month = int(m["year"]), int(m["month"])
-        if not 1 <= month <= 12:
-            raise SeriesDefinitionError(message=f"Invalid month in period {raw!r}")
-        return Period(sort_key=year * 12 + (month - 1), frequency=frequency, raw=raw)
-
-    if frequency == Frequency.QUARTERLY:
-        m = _QUARTERLY_RE.match(raw)
-        if not m:
-            raise SeriesDefinitionError(
-                message=f"Expected quarterly period 'YYYY-Qn', received {raw!r}"
-            )
-        year, quarter = int(m["year"]), int(m["quarter"])
-        return Period(sort_key=year * 4 + (quarter - 1), frequency=frequency, raw=raw)
-
-    if frequency == Frequency.ANNUAL:
-        m = _ANNUAL_RE.match(raw)
-        if not m:
-            raise SeriesDefinitionError(
-                message=f"Expected annual period 'YYYY', received {raw!r}"
-            )
-        year = int(m["year"])
-        return Period(sort_key=year, frequency=frequency, raw=raw)
-
-    if frequency == Frequency.DAILY:
-        m = _DAILY_RE.match(raw)
-        if not m:
-            raise SeriesDefinitionError(
-                message=f"Expected daily period 'YYYY-MM-DD', received {raw!r}"
-            )
-        try:
-            d = date(int(m["year"]), int(m["month"]), int(m["day"]))
-        except ValueError as exc:
-            raise SeriesDefinitionError(message=f"Invalid calendar date in period {raw!r}") from exc
-        return Period(sort_key=d.toordinal(), frequency=frequency, raw=raw)
-
-    if frequency == Frequency.WEEKLY:
-        m = _WEEKLY_RE.match(raw)
-        if not m:
-            raise SeriesDefinitionError(
-                message=f"Expected ISO weekly period 'YYYY-Www', received {raw!r}"
-            )
-        year, week = int(m["year"]), int(m["week"])
-        try:
-            monday = date.fromisocalendar(year, week, 1)
-        except ValueError as exc:
-            raise SeriesDefinitionError(message=f"Invalid ISO week in period {raw!r}") from exc
-        return Period(sort_key=monday.toordinal(), frequency=frequency, raw=raw)
-
-    raise UnsupportedMethodError(method=str(frequency), context="parse_period")  # pragma: no cover
+    parser = _PERIOD_PARSER.get(frequency)
+    if not parser:
+        raise UnsupportedMethodError(method=str(frequency), context="parse_period")  # pragma: no cover
+    
+    return parser(raw, frequency)
 
 
 def yoy_lag(frequency: Frequency) -> int:

@@ -228,6 +228,12 @@ def sample_std(values: Sequence[float]) -> float:
     variance = sum((x - mean) ** 2 for x in values) / (n - 1)
     return math.sqrt(variance)
 
+def _validate_alpha_beta_unit(alpha:float, beta:float) -> None:
+    if not 0 <= alpha < 1 or not 0 <= beta < 1 or alpha + beta >= 1:
+        raise DataQualityError(
+            f"trimmed_mean requires 0 <= alpha, beta and alpha + beta < 1, got "
+            f"alpha={alpha}, beta={beta}"
+        )
 
 def trimmed_mean(
     values: Mapping[str, float],
@@ -257,11 +263,7 @@ def trimmed_mean(
     Returns ``(trimmed_mean_value, retained_keys)``.
     """
 
-    if not 0 <= alpha < 1 or not 0 <= beta < 1 or alpha + beta >= 1:
-        raise DataQualityError(
-            f"trimmed_mean requires 0 <= alpha, beta and alpha + beta < 1, got "
-            f"alpha={alpha}, beta={beta}"
-        )
+    _validate_alpha_beta_unit(alpha, beta)
     _check_matching_keys(values, weights, context="trimmed_mean")
     validate_weights(weights, tolerance=tolerance, context="trimmed_mean")
     ordered = _sorted_by_value(values)
