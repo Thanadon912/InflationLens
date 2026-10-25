@@ -41,7 +41,6 @@ def _handle_headline_consumer(geo: str, body: dict) -> IndicatorResult:
     period = parse_period_field(body, "period", series.frequency)
     return headline_consumer.calculate(series, period, calculated_at=now_iso())
 
-
 def _handle_underlying(geo: str, body: dict, profile: dict) -> IndicatorResult:
     cfg_raw = profile["underlying"]
     trim = cfg_raw.get("trim_mean", cfg_raw.get("trimmed_mean", {}))
