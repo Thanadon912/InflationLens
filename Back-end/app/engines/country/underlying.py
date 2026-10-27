@@ -45,10 +45,14 @@ class UnderlyingConfig:
     trim_boundary_handling: str = "exclude_whole"
 
 class UnderlyingMethod(Protocol):
-    component_rates: Mapping[str, float]
-    component_weights: Mapping[str, float]
 
-    def compute(x: UnderlyingInputs) -> float: ...
+    @property
+    def name(self) -> str: ... 
+
+    @property
+    def component_key(self) -> str: ... 
+
+    def compute(self, x: UnderlyingInputs) -> float: ...
 
 @dataclass(frozen=True)
 class UnderlyingInputs:
@@ -86,8 +90,15 @@ class OfficialCore:
     name: str = "official_core"
     component_key: str = "core_value"
 
+    @property
+    def label(self) -> str:
+        """Provenance-aware label: only a value the statistics office
+        published may be called "Official" (COUNTRY guidelines 5.8)."""
+
+        return "Official Value" if self.official_value is not None else"Core (derived)"
+
     def compute(self, x: UnderlyingInputs) -> float:
-        if self.official_value:
+        if self.official_value is not None:
             return self.official_value
         return _core_exclusion(x.component_rates, x.component_weights, self.excluded_categories,)
 
@@ -154,7 +165,7 @@ def calculate(
     components = tuple(
         Component(
             key=method.component_key,
-            label=method.name.replace("_", " ").title(),
+            label=_labal(method),
             value=values.get(method.name),
             unit=Unit.PERCENT_YOY,
         )
@@ -183,6 +194,9 @@ def calculate(
         metadata={"selected_method": selected_method},
     )
 
+def _labal(method: UnderlyingMethod):
+    label = getattr(method, "label", method.name) 
+    return label if label else method.name.replace("_", " ").title()
 
 def _safe(fn, method_name: str, warnings: list[str]) -> float | None:
     try:
