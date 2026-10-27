@@ -140,3 +140,23 @@ def parse_observation_series(raw: object, *, field: str = "observations") -> Obs
         return ObservationSeries(observations)
     except SeriesDefinitionError as exc:
         raise SchemaError(str(exc), field=field) from exc
+
+
+def normalize_string_sequence(val: object) -> tuple[str, ...]:
+    """turn input into a tuple of string
+    - None หรือ "" -> ()
+    - "food" -> ("food",)
+    - ["food", "energy"] -> ("food", "energy")
+    """
+
+    if val is None:
+        return ()
+
+    if isinstance(val, str):
+        clean_str = val.strip()
+        return (clean_str,) if clean_str else ()
+
+    if isinstance(val, (list, tuple)):
+        return tuple(str(x).strip() for x in val if x and str(x).strip())
+
+    return ()

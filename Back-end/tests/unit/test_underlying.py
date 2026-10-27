@@ -62,6 +62,28 @@ class TestAllMethodsComputed:
         core = next(c for c in result.components if c.key == "core_value")
         assert core.value == pytest.approx(3.1)
 
+    def test_component_labels_and_official_vs_derived(self):
+        # Derived core has label "Core (derived)"
+        result_derived = underlying.calculate(
+            component_rates=RATES, component_weights=WEIGHTS, config=cfg(),
+            geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
+        )
+        labels_by_key = {c.key: c.label for c in result_derived.components}
+        assert labels_by_key["weighted_median_value"] == "Weighted Median"
+        assert labels_by_key["trimmed_mean_value"] == "Trimmed Mean"
+        assert labels_by_key["model_based_value"] == "Model Based"
+        assert labels_by_key["core_value"] == "Core (derived)"
+
+        # Published official core has label "Official Value"
+        result_official = underlying.calculate(
+            component_rates=RATES, component_weights=WEIGHTS, config=cfg(),
+            geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
+            official_core_value=3.1,
+        )
+        core_comp = next(c for c in result_official.components if c.key == "core_value")
+        assert core_comp.label == "Official Value"
+
+
 
 class TestMethodSelection:
     def test_selects_preferred_method(self):
@@ -146,3 +168,51 @@ class TestEdgeCases:
         )
         core = next(c for c in result.components if c.key == "core_value")
         assert core.value < 10  # excluding the extreme energy component keeps core moderate
+
+
+class TestHandleUnderlyingProfileFormats:
+    def test_single_string_excluded_categories_and_fallbacks(self):
+        from app.api.country import _handle_underlying
+
+        profile = {
+            "underlying": {
+                "preferred_method": "official_core",
+                "fallback_methods": "trimmed_mean",
+                "trimmed_mean": {"alpha": 0.1, "beta": 0.1},
+                "core_exclusion": {
+                    "excluded_categories": "energy",
+                },
+            }
+        }
+        body = {
+            "component_rates": {"food": 5.0, "energy": 900.0, "shelter": 3.0},
+            "component_weights": {"food": 0.3, "energy": 0.3, "shelter": 0.4},
+            "period": "2026-06",
+        }
+        result = _handle_underlying("USA", body, profile)
+        core = next(c for c in result.components if c.key == "core_value")
+        # energy (900.0) must be excluded, not retained because of ('e','n','e','r','g','y')!
+        assert core.value < 10
+        assert result.metadata["selected_method"] == "official_core"
+
+    def test_empty_string_or_none_excluded_categories(self):
+        from app.api.country import _handle_underlying
+
+        profile = {
+            "underlying": {
+                "preferred_method": "weighted_median",
+                "fallback_methods": "",
+                "trimmed_mean": {},
+                "core_exclusion": {
+                    "excluded_categories": None,
+                },
+            }
+        }
+        body = {
+            "component_rates": {"food": 5.0, "shelter": 3.0},
+            "component_weights": {"food": 0.5, "shelter": 0.5},
+            "period": "2026-06",
+        }
+        result = _handle_underlying("USA", body, profile)
+        assert result.value is not None
+

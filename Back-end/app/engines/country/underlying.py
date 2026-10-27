@@ -165,7 +165,7 @@ def calculate(
     components = tuple(
         Component(
             key=method.component_key,
-            label=_labal(method),
+            label=_label(method),
             value=values.get(method.name),
             unit=Unit.PERCENT_YOY,
         )
@@ -194,8 +194,8 @@ def calculate(
         metadata={"selected_method": selected_method},
     )
 
-def _labal(method: UnderlyingMethod):
-    label = getattr(method, "label", method.name) 
+def _label(method: UnderlyingMethod) -> str:
+    label = getattr(method, "label", None)
     return label if label else method.name.replace("_", " ").title()
 
 def _safe(fn, method_name: str, warnings: list[str]) -> float | None:
