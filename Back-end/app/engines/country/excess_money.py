@@ -43,7 +43,6 @@ def calculate(
     config_version: str | None = None,
 ) -> IndicatorResult:
     """EMG_t = g_t(M) - g_t(Y) (COUNTRY guidelines section 10.2).
-
     COUNTRY guidelines section 10.7: "Do not combine monthly money growth
     with quarterly GDP growth without explicit alignment" -- enforced here
     by requiring ``money_period`` and ``real_output_period`` to refer to

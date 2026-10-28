@@ -5,6 +5,7 @@ from app.api.schemas import (
     get_float,
     get_mapping,
     get_str,
+    normalize_string_sequence,
     parse_observation,
     parse_observation_series,
     parse_period_field,
@@ -176,3 +177,28 @@ class TestParseObservationSeries:
     def test_duplicate_periods_raises_schema_error(self):
         with pytest.raises(SchemaError):
             parse_observation_series([VALID_OBS, VALID_OBS])
+
+
+class TestNormalizeStringSequence:
+    def test_none_returns_empty_tuple(self):
+        assert normalize_string_sequence(None) == ()
+
+    def test_empty_string_returns_empty_tuple(self):
+        assert normalize_string_sequence("") == ()
+        assert normalize_string_sequence("   ") == ()
+
+    def test_single_string_wrapped_as_single_element_tuple(self):
+        assert normalize_string_sequence("food") == ("food",)
+        assert normalize_string_sequence("  food  ") == ("food",)
+
+    def test_sequence_of_strings_returns_clean_tuple(self):
+        assert normalize_string_sequence(["food", "energy"]) == ("food", "energy")
+        assert normalize_string_sequence(("food", "energy")) == ("food", "energy")
+
+    def test_sequence_filters_empty_and_whitespace(self):
+        assert normalize_string_sequence(["food", "", "  ", None, "energy"]) == ("food", "energy")
+
+    def test_other_types_return_empty_tuple(self):
+        assert normalize_string_sequence(123) == ()
+        assert normalize_string_sequence({}) == ()
+

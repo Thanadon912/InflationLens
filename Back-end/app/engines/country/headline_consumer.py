@@ -9,6 +9,7 @@ household consumption basket changed?
 
 from __future__ import annotations
 
+import copy
 from app.engines.shared import growth
 from app.engines.shared.errors import EngineError
 from app.engines.shared.periods import Period, yoy_lag
@@ -16,8 +17,7 @@ from app.engines.shared.quality import build_provenance, derive_confidence, gap_
 from app.engines.shared.validation import (
     require_lagged_observation,
     require_observation_at,
-    validate_positive_index,
-    validate_unit,
+    validate_unit
 )
 from app.models.enums import Coverage, Frequency, Unit
 from app.models.indicator_result import Component, IndicatorResult
@@ -51,22 +51,11 @@ def calculate(
     computed).
     """
 
-    validate_unit(cpi_series.unit, ACCEPTED_UNITS, indicator_id=INDICATOR_ID)
-    if cpi_series.frequency not in ACCEPTED_FREQUENCIES:
-        from app.engines.shared.errors import FrequencyMismatchError
-
-        raise FrequencyMismatchError(
-            expected="/".join(f.value for f in ACCEPTED_FREQUENCIES),
-            received=cpi_series.frequency.value,
-            indicator=INDICATOR_ID,
-        )
-
+    validate_unit_input(cpi_series)
     current = require_observation_at(cpi_series, period, context=INDICATOR_ID)
-    validate_positive_index(current.value, context=INDICATOR_ID)
 
     lag = yoy_lag(cpi_series.frequency)
     prior_year = require_lagged_observation(cpi_series, period, lag, context=INDICATOR_ID)
-    validate_positive_index(prior_year.value, context=INDICATOR_ID)
 
     yoy_value = growth.year_over_year(current.value, prior_year.value)
 
@@ -82,15 +71,14 @@ def calculate(
     # Three- and six-month annualized momentum -- only defined for monthly
     # data. Six-month backs the workbench window rail's "6-month
     # annualised" option alongside the existing three-month figure.
-    if cpi_series.frequency == Frequency.MONTHLY:
-        momentum_component, momentum_obs = _try_three_month_annualized(cpi_series, period, warnings)
-        components.append(momentum_component)
-        used_observations.extend(momentum_obs)
-        six_month_component, six_month_obs = _try_n_month_annualized(
-            cpi_series, period, warnings, horizon=_SIX_MONTH_HORIZON, key="six_month_annualized", label="Six-month annualized momentum"
-        )
-        components.append(six_month_component)
-        used_observations.extend(six_month_obs)
+    comps, used_observs, warns = calculate_for_monthly(cpi_series, period)
+
+    if comps:
+        components.extend(comps)
+    if used_observs:
+        used_observations.extend(used_observs)
+    if warns:
+        warnings.extend(warns)
 
     confidence = derive_confidence(*used_observations)
     is_estimated = any(o.is_estimated for o in used_observations)
@@ -117,7 +105,6 @@ def calculate(
             "includes_housing_ownership_costs": None,
         },
     )
-
 
 def _try_period_over_period(
     series: ObservationSeries, period: Period, warnings: list[str]
@@ -156,3 +143,34 @@ def _try_n_month_annualized(
     except EngineError as exc:
         warnings.append(f"{key} unavailable: {exc.message}")
         return (Component(key=key, label=label, value=None, unit=Unit.PERCENT_ANNUALIZED), [])
+
+
+def validate_unit_input(cpi_series: ObservationSeries, indicator_id: str = INDICATOR_ID):
+    validate_unit(cpi_series.unit, ACCEPTED_UNITS, indicator_id=indicator_id)
+    if cpi_series.frequency not in ACCEPTED_FREQUENCIES:
+        from app.engines.shared.errors import FrequencyMismatchError
+
+        raise FrequencyMismatchError(
+            expected="/".join(f.value for f in ACCEPTED_FREQUENCIES),
+            received=cpi_series.frequency.value,
+            indicator=INDICATOR_ID,
+        )
+
+def calculate_for_monthly(
+        cpi_series: ObservationSeries,
+        period: Period,
+) -> tuple[list[Component], list, list[str]]:
+    used_observations: list = []
+    components: list[Component] = []
+    warnings: list[str] = []
+    if cpi_series.frequency == Frequency.MONTHLY:
+        momentum_component, momentum_obs = _try_three_month_annualized(cpi_series, period, warnings)
+        components.append(momentum_component)
+        used_observations.extend(momentum_obs)
+        six_month_component, six_month_obs = _try_n_month_annualized(
+            cpi_series, period, warnings, horizon=_SIX_MONTH_HORIZON, key="six_month_annualized", label="Six-month annualized momentum"
+        )
+        components.append(six_month_component)
+        used_observations.extend(six_month_obs)
+
+    return components, used_observations, warnings

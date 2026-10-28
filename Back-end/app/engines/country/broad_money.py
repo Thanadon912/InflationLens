@@ -11,6 +11,7 @@ consumer-price inflation rate -- COUNTRY guidelines section 9.8: "Use
 """
 
 from __future__ import annotations
+import copy
 
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.errors import DataQualityError
@@ -24,6 +25,59 @@ INDICATOR_ID = "broad_money_expansion"
 METHODOLOGY_VERSION = "1.0.1"
 LABEL = "Broad Money Expansion"
 
+def _compute_real_gdp_growth_n_rdio_current(
+        real_gdp_current: float | None,
+        real_gdp_prior_year: float | None,
+        money_current: float,
+        money_growth: float
+) -> tuple[list[Component] | None, str | None]:
+    components: list[Component] = []
+    if real_gdp_current is None and real_gdp_prior_year is None:
+        return None, f"{INDICATOR_ID}: money_to_real_output_ratio unavailable (missing real GDP data)"
+    if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
+        raise DataQualityError("Real GDP levels must be positive for money/output calculations")
+    
+    ratio_current = money_current / real_gdp_current
+    components.append(
+        Component(
+            key="money_to_real_output_ratio",
+            label="Money-to-Real-Output Ratio",
+            value=ratio_current,
+            unit=Unit.RATIO,
+        )
+    )
+    real_gdp_growth = year_over_year(real_gdp_current, real_gdp_prior_year)
+    components.append(
+        Component(
+            key="money_to_real_output_growth_approx",
+            label="Money-to-Real-Output Ratio Growth (approx: g(M) - g(RealGDP))",
+            value=money_growth - real_gdp_growth,
+            unit=Unit.PERCENT_YOY,
+        )
+    )
+    return components, None
+
+def _compute_per_capita_growth(
+        population_current: float | None,
+        population_prior_year: float | None,
+        money_current: float,
+        money_prior_year: float
+) -> tuple[Component | None, str | None]:
+    if population_current is None and population_prior_year is None:
+        return None, f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)"
+    if population_current <= 0 or population_prior_year <= 0:
+        raise DataQualityError("Population levels must be positive for per-capita money growth")
+    
+    per_capita_current = money_current / population_current
+    per_capita_prior = money_prior_year / population_prior_year
+    per_capita_growth = year_over_year(per_capita_current, per_capita_prior)
+    components = Component(
+        key="per_capita_growth",
+        label="Per-Capita Money Growth",
+        value=per_capita_growth,
+        unit=Unit.PERCENT_YOY,
+    )
+    return components, None
 
 def calculate(
     *,
@@ -51,47 +105,27 @@ def calculate(
 
     components: list[Component] = []
     warnings: list[str] = []
+    comp, warn = _compute_per_capita_growth(
+        population_current,
+        population_prior_year,
+        money_current,
+        money_prior_year
+    )
+    if comp:
+        components.append(comp)
+    if warn:
+        warnings.append(warn)
 
-    if population_current is not None and population_prior_year is not None:
-        if population_current <= 0 or population_prior_year <= 0:
-            raise DataQualityError("Population levels must be positive for per-capita money growth")
-        per_capita_current = money_current / population_current
-        per_capita_prior = money_prior_year / population_prior_year
-        per_capita_growth = year_over_year(per_capita_current, per_capita_prior)
-        components.append(
-            Component(
-                key="per_capita_growth",
-                label="Per-Capita Money Growth",
-                value=per_capita_growth,
-                unit=Unit.PERCENT_YOY,
-            )
-        )
-    else:
-        warnings.append(f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)")
-
-    if real_gdp_current is not None and real_gdp_prior_year is not None:
-        if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
-            raise DataQualityError("Real GDP levels must be positive for money/output calculations")
-        ratio_current = money_current / real_gdp_current
-        components.append(
-            Component(
-                key="money_to_real_output_ratio",
-                label="Money-to-Real-Output Ratio",
-                value=ratio_current,
-                unit=Unit.RATIO,
-            )
-        )
-        real_gdp_growth = year_over_year(real_gdp_current, real_gdp_prior_year)
-        components.append(
-            Component(
-                key="money_to_real_output_growth_approx",
-                label="Money-to-Real-Output Ratio Growth (approx: g(M) - g(RealGDP))",
-                value=money_growth - real_gdp_growth,
-                unit=Unit.PERCENT_YOY,
-            )
-        )
-    else:
-        warnings.append(f"{INDICATOR_ID}: money_to_real_output_ratio unavailable (missing real GDP data)")
+    comps, warn = _compute_real_gdp_growth_n_rdio_current(
+        real_gdp_current,
+        real_gdp_prior_year,
+        money_current,
+        money_growth
+    )
+    if comps:
+        components.extend(comps)
+    if warn:
+        warnings.append(warn)
 
     confidence = derive_confidence(*source_observations) if source_observations else Confidence.HIGH
     is_estimated = any(o.is_estimated for o in source_observations)

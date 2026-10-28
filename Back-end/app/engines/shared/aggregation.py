@@ -228,6 +228,12 @@ def sample_std(values: Sequence[float]) -> float:
     variance = sum((x - mean) ** 2 for x in values) / (n - 1)
     return math.sqrt(variance)
 
+def _validate_alpha_beta_unit(alpha:float, beta:float) -> None:
+    if not 0 <= alpha < 1 or not 0 <= beta < 1 or alpha + beta >= 1:
+        raise DataQualityError(
+            f"trimmed_mean requires 0 <= alpha, beta and alpha + beta < 1, got "
+            f"alpha={alpha}, beta={beta}"
+        )
 
 def trimmed_mean(
     values: Mapping[str, float],
@@ -257,11 +263,7 @@ def trimmed_mean(
     Returns ``(trimmed_mean_value, retained_keys)``.
     """
 
-    if not 0 <= alpha < 1 or not 0 <= beta < 1 or alpha + beta >= 1:
-        raise DataQualityError(
-            f"trimmed_mean requires 0 <= alpha, beta and alpha + beta < 1, got "
-            f"alpha={alpha}, beta={beta}"
-        )
+    _validate_alpha_beta_unit(alpha, beta)
     _check_matching_keys(values, weights, context="trimmed_mean")
     validate_weights(weights, tolerance=tolerance, context="trimmed_mean")
     ordered = _sorted_by_value(values)
@@ -300,6 +302,20 @@ def trimmed_mean(
         )
     return weighted_sum / retained_weight, tuple(retained_keys)
 
+def _resolve_laspeyres_keys(
+        prices_current: Mapping[str, float],
+        prices_base: Mapping[str, float],
+        quantities_base: Mapping[str, float]
+):
+    keys = set(prices_current) & set(prices_base) & set(quantities_base)
+    all_keys = set(prices_current) | set(prices_base) | set(quantities_base)
+    if not keys or keys != all_keys:
+        raise DataQualityError(
+            "laspeyres_price_index: prices_current, prices_base, and quantities_base "
+            "must all cover exactly the same items",
+            missing_or_mismatched=sorted(all_keys - keys),
+        )
+    return keys
 
 def laspeyres_price_index(
     prices_current: Mapping[str, float],
@@ -317,14 +333,7 @@ def laspeyres_price_index(
     tested implementation instead of two copies.
     """
 
-    keys = set(prices_current) & set(prices_base) & set(quantities_base)
-    all_keys = set(prices_current) | set(prices_base) | set(quantities_base)
-    if not keys or keys != all_keys:
-        raise DataQualityError(
-            "laspeyres_price_index: prices_current, prices_base, and quantities_base "
-            "must all cover exactly the same items",
-            missing_or_mismatched=sorted(all_keys - keys),
-        )
+    keys = _resolve_laspeyres_keys(prices_current, prices_base, quantities_base)
     numerator = sum(prices_current[k] * quantities_base[k] for k in keys)
     denominator = sum(prices_base[k] * quantities_base[k] for k in keys)
     if denominator <= 0:

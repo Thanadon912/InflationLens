@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from app.api.schemas import SchemaError, get_float, get_mapping, get_str, parse_observation_series, parse_period_field, require
+from app.api.schemas import (
+    SchemaError, get_float, get_mapping, get_str,parse_observation_series,
+    parse_period_field, require, normalize_string_sequence,
+)
 from app.api.util import now_iso
 from app.engines.country import (
     broad_money,
@@ -25,7 +28,7 @@ from app.engines.country import (
     housing,
     producer_import,
     purchasing_power,
-    underlying
+    underlying,
 )
 from app.engines.shared.periods import parse_period
 from app.models.enums import Frequency
@@ -34,23 +37,24 @@ from app.models.indicator_result import IndicatorResult
 Handler = Callable[[str, dict, dict], IndicatorResult]
 
 
-def _handle_headline_consumer(geo: str, body: dict, profile: dict) -> IndicatorResult:
+def _handle_headline_consumer(geo: str, body: dict) -> IndicatorResult:
     series = parse_observation_series(require(body, "observations"))
     if series.geography != geo:
         raise SchemaError(f"observations geography {series.geography!r} does not match path geography {geo!r}")
     period = parse_period_field(body, "period", series.frequency)
     return headline_consumer.calculate(series, period, calculated_at=now_iso())
 
-
 def _handle_underlying(geo: str, body: dict, profile: dict) -> IndicatorResult:
     cfg_raw = profile["underlying"]
     trim = cfg_raw.get("trim_mean", cfg_raw.get("trimmed_mean", {}))
+    fallback = normalize_string_sequence(cfg_raw.get("fallback_methods"))
+    excluded_categories = normalize_string_sequence(cfg_raw.get("core_exclusion", {}).get("excluded_categories"))
     config = underlying.UnderlyingConfig(
         preferred_method=cfg_raw["preferred_method"],
-        fallback_methods=tuple(cfg_raw.get("fallback_methods", ())),
+        fallback_methods=fallback,
         trim_alpha=trim.get("alpha", 0.1),
         trim_beta=trim.get("beta", 0.1),
-        excluded_categories=tuple(cfg_raw.get("core_exclusion", {}).get("excluded_categories", ())),
+        excluded_categories=excluded_categories,
         trim_boundary_handling=trim.get("boundary_handling", "exclude_whole"),
     )
     return underlying.calculate(

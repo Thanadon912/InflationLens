@@ -17,6 +17,7 @@ ENGINE guidelines section 8.2).
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Protocol
 from dataclasses import dataclass
 
 from app.engines.shared.aggregation import trimmed_mean, weighted_arithmetic_mean, weighted_median
@@ -31,14 +32,6 @@ from app.models.observation import Observation
 INDICATOR_ID = "underlying_inflation"
 METHODOLOGY_VERSION = "1.0.1"
 
-_METHOD_KEYS = {
-    "weighted_median": "weighted_median_value",
-    "trimmed_mean": "trimmed_mean_value",
-    "official_core": "core_value",
-    "model_based": "model_based_value",
-}
-
-
 @dataclass(frozen=True)
 class UnderlyingConfig:
     """Externalized policy for Underlying Inflation (ENGINE guidelines
@@ -51,6 +44,89 @@ class UnderlyingConfig:
     excluded_categories: tuple[str, ...]
     trim_boundary_handling: str = "exclude_whole"
 
+class UnderlyingMethod(Protocol):
+
+    @property
+    def name(self) -> str: ... 
+
+    @property
+    def component_key(self) -> str: ... 
+
+    def compute(self, x: UnderlyingInputs) -> float: ...
+
+@dataclass(frozen=True)
+class UnderlyingInputs:
+    component_rates: Mapping[str, float]
+    component_weights: Mapping[str, float]
+
+@dataclass(frozen=True)
+class WeightedMedian:
+    name: str = "weighted_median"
+    component_key: str = "weighted_median_value"
+
+    def compute(self, x: UnderlyingInputs) -> float:
+        return weighted_median(x.component_rates, x.component_weights,)
+
+@dataclass(frozen=True)
+class TrimmedMean:
+    alpha: float = 0.1
+    beta: float = 0.1
+    name: str = "trimmed_mean"
+    component_key: str = "trimmed_mean_value"
+    boundary_handling: str = "exclude_whole"
+
+    def compute(self, x: UnderlyingInputs) -> float:
+        return trimmed_mean(
+            x.component_rates, x.component_weights,
+            alpha=self.alpha, beta=self.beta,
+            boundary_handling=self.boundary_handling,
+        )[0]
+        
+
+@dataclass(frozen=True)
+class OfficialCore:
+    excluded_categories: tuple[str, ...]
+    official_value: float | None
+    name: str = "official_core"
+    component_key: str = "core_value"
+
+    @property
+    def label(self) -> str:
+        """Provenance-aware label: only a value the statistics office
+        published may be called "Official" (COUNTRY guidelines 5.8)."""
+
+        return "Official Value" if self.official_value is not None else"Core (derived)"
+
+    def compute(self, x: UnderlyingInputs) -> float:
+        if self.official_value is not None:
+            return self.official_value
+        return _core_exclusion(x.component_rates, x.component_weights, self.excluded_categories,)
+
+@dataclass(frozen=True)
+class ModelBased:
+    name: str = "model_based"
+    component_key: str = "model_based_value"
+
+    def compute(self, x: UnderlyingInputs) -> float:
+        raise UnsupportedMethodError(method="model_based", context="factor model not implemented in v1")
+
+def build_methods(
+        config: UnderlyingConfig,
+        official_core_value: float | None = None
+) -> dict[str, UnderlyingMethod]:
+    return {
+        "weighted_median":  WeightedMedian(),
+        "trimmed_mean": TrimmedMean(
+            alpha=config.trim_alpha,
+            beta=config.trim_beta,
+            boundary_handling=config.trim_boundary_handling,
+        ),
+        "official_core": OfficialCore(
+            config.excluded_categories,
+            official_value=official_core_value
+        ),
+        "model_based": ModelBased(),
+    }
 
 def calculate(
     *,
@@ -75,43 +151,25 @@ def calculate(
     items less food and energy"); when present it is used for the
     ``official_core`` method instead of being derived.
     """
-
     values: dict[str, float | None] = {}
     warnings: list[str] = []
 
-    values["weighted_median"] = _safe(
-        lambda: weighted_median(component_rates, component_weights), "weighted_median", warnings
-    )
-    values["trimmed_mean"] = _safe(
-        lambda: trimmed_mean(
-            component_rates,
-            component_weights,
-            alpha=config.trim_alpha,
-            beta=config.trim_beta,
-            boundary_handling=config.trim_boundary_handling,
-        )[0],
-        "trimmed_mean",
-        warnings,
-    )
-    values["official_core"] = _safe(
-        lambda: _core_exclusion(component_rates, component_weights, config.excluded_categories)
-        if official_core_value is None
-        else official_core_value,
-        "official_core",
-        warnings,
-    )
-    values["model_based"] = _safe(_unavailable_model_based, "model_based", warnings)
+    inputs = UnderlyingInputs(component_rates, component_weights)
+
+    methods = build_methods(config, official_core_value)
+    for name, method in methods.items():
+        values[name] = _safe(lambda m=method: m.compute(inputs), name, warnings)
 
     selected_method, selected_value = _select(config, values)
 
     components = tuple(
         Component(
-            key=_METHOD_KEYS[method],
-            label=method.replace("_", " ").title(),
-            value=values.get(method),
+            key=method.component_key,
+            label=_label(method),
+            value=values.get(method.name),
             unit=Unit.PERCENT_YOY,
         )
-        for method in _METHOD_KEYS
+        for method in methods.values()
     )
 
     confidence = derive_confidence(*source_observations) if source_observations else Confidence.LOW
@@ -136,6 +194,9 @@ def calculate(
         metadata={"selected_method": selected_method},
     )
 
+def _label(method: UnderlyingMethod) -> str:
+    label = getattr(method, "label", None)
+    return label if label else method.name.replace("_", " ").title()
 
 def _safe(fn, method_name: str, warnings: list[str]) -> float | None:
     try:
@@ -159,14 +220,6 @@ def _core_exclusion(
     renormalized = renormalize_weights(component_weights, retained_keys)
     retained_rates = {k: component_rates[k] for k in retained_keys}
     return weighted_arithmetic_mean(retained_rates, renormalized)
-
-
-def _unavailable_model_based() -> float:
-    # COUNTRY guidelines section 5.6's common-factor model requires a
-    # statistical estimation procedure that is out of scope for this
-    # phase; it must still be reported (as unavailable), never omitted.
-    raise UnsupportedMethodError(method="model_based", context="factor model not implemented in v1")
-
 
 def _select(config: UnderlyingConfig, values: Mapping[str, float | None]) -> tuple[str | None, float | None]:
     candidates = [config.preferred_method, *config.fallback_methods]

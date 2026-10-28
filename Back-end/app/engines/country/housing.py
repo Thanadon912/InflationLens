@@ -107,7 +107,8 @@ def calculate(
     mortgage_payment_inflation = None
     if all(
         v is not None
-        for v in (property_price_current, property_price_prior_year, mortgage_rate_current, mortgage_rate_prior_year, mortgage_assumptions)
+        for v in (property_price_current, property_price_prior_year,
+                  mortgage_rate_current, mortgage_rate_prior_year, mortgage_assumptions)
     ):
         n_periods = mortgage_assumptions.term_years * mortgage_assumptions.periods_per_year()
         loan_current = mortgage_assumptions.loan_to_value * property_price_current

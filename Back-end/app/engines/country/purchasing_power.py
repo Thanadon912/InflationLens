@@ -127,5 +127,5 @@ def calculate(
         metadata={
             "wage_measure": wage_measure,
             "income_definition": income_definition,
-        },
+        }
     )

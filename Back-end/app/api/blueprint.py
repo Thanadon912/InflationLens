@@ -140,7 +140,10 @@ def _safe_call(fn, *, indicator_id: str, geography: str, methodology_version: st
 
 def _calculate_country(handler, geography: str, indicator_id: str, body: dict, profile: dict) -> IndicatorResult:
     normalized = normalize_request(indicator_id, body)
-    result = handler(geography, normalized.legacy, profile)
+    if indicator_id == "headline_consumer_inflation":
+        result = handler(geography, normalized.legacy)
+    else:
+        result = handler(geography, normalized.legacy, profile)
     versions = load_methodology_versions()
     return _enrich_result(result, normalized, methodology_version=versions["country"][indicator_id], config_version=profile["profile_version"])
 
