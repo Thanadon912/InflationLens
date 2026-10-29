@@ -243,6 +243,37 @@ class TestWeightAndCoverageRoleAlignment:
         with pytest.raises(PeriodAlignmentError):
             c.normalize_request("median_country_inflation", body, global_scope=True, structurally_dominant_weight=0.5)
 
+    def test_malformed_non_year_target_period_raises_schema_error_not_value_error(self):
+        body = median_body(weights={"USA": 1.0}, rates_geos=["USA"], universe=["USA"])
+        body["period"] = "abcd"
+        with pytest.raises(SchemaError):
+            c.normalize_request("median_country_inflation", body, global_scope=True, structurally_dominant_weight=0.5)
+
+    def test_country_money_growth_and_secondary_weights_are_normalized(self):
+        body = {
+            "period": "2026-Q2",
+            "universe": ["USA", "EA"],
+            "inputs": {
+                "global_money_expansion_percent": [obs("global_money_expansion_percent", 7.0, "2026-Q2", geography="GLOBAL", frequency="quarterly")],
+                "global_real_gdp_growth_percent": [obs("global_real_gdp_growth_percent", 2.5, "2026-Q2", geography="GLOBAL", frequency="quarterly")],
+                "country_money_growth": [
+                    obs("country_money_growth", 7.0, "2026-Q2", geography="USA", frequency="quarterly", component_id="USA", indicator_id="broad_money_expansion"),
+                ],
+                "country_real_gdp_growth": [
+                    obs("country_real_gdp_growth", 2.0, "2026-Q2", geography="USA", frequency="quarterly", component_id="USA"),
+                ],
+                "country_weights": [
+                    obs("country_weights", 0.9, "2025", geography="USA", unit="ratio", frequency="annual", component_id="USA"),
+                    obs("country_weights", 0.1, "2025", geography="EA", unit="ratio", frequency="annual", component_id="EA"),
+                ],
+                "population_by_geo": [coverage_obs("population_by_geo", 90.0, geography="USA"), coverage_obs("population_by_geo", 10.0, geography="EA")],
+                "gdp_ppp_by_geo": [coverage_obs("gdp_ppp_by_geo", 90.0, geography="USA"), coverage_obs("gdp_ppp_by_geo", 10.0, geography="EA")],
+                "consumption_ppp_by_geo": [coverage_obs("consumption_ppp_by_geo", 90.0, geography="USA"), coverage_obs("consumption_ppp_by_geo", 10.0, geography="EA")],
+            },
+        }
+        normalized = c.normalize_request("global_excess_money_growth", body, global_scope=True, structurally_dominant_weight=0.2)
+        assert normalized.legacy["country_weights"] == pytest.approx({"USA": 1.0})
+
 
 class TestCpiSeriesPeriod:
     def test_missing_requested_period_rejected(self):

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
+import re
+import secrets
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -10,6 +11,12 @@ from typing import Any, Callable
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
+
+_SYSTEM_RANDOM = secrets.SystemRandom()
+_SENSITIVE_PARAM_KEYS = {"api_key", "apikey", "userid", "token", "access_token", "key"}
+_SENSITIVE_TEXT_RE = re.compile(
+    r"(?i)\b(api_key|apikey|userid|token|access_token|key)=([^&\s'\"<>]+)"
+)
 
 
 class ProviderError(RuntimeError):
@@ -52,9 +59,16 @@ def utc_now() -> str:
 
 def sanitize_url(url: str) -> str:
     parts = urlsplit(url)
-    sensitive = {"api_key", "apikey", "userid", "token", "access_token", "key"}
-    query = [(key, "REDACTED" if key.lower() in sensitive else value) for key, value in parse_qsl(parts.query)]
+    query = [
+        (key, "REDACTED" if key.lower() in _SENSITIVE_PARAM_KEYS else value)
+        for key, value in parse_qsl(parts.query)
+    ]
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def sanitize_text(text: str) -> str:
+    """Redact credential query parameters inside arbitrary error messages or URLs."""
+    return _SENSITIVE_TEXT_RE.sub(r"\1=REDACTED", text)
 
 
 class ResilientClient:
@@ -71,6 +85,8 @@ class ResilientClient:
         self.client = httpx.Client(timeout=timeout, follow_redirects=True, transport=transport)
 
     def request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        if urlsplit(url).scheme != "https":
+            raise ProviderError("Refusing non-HTTPS provider URL")
         last_error: Exception | None = None
         for attempt in range(self.attempts):
             try:
@@ -80,10 +96,14 @@ class ResilientClient:
                     return response
                 last_error = ProviderError(f"Provider returned retryable HTTP {response.status_code}")
                 retry_after = response.headers.get("Retry-After")
-                delay = float(retry_after) if retry_after and retry_after.isdigit() else (2**attempt + random.random())
+                delay = (
+                    float(retry_after)
+                    if retry_after and retry_after.isdigit()
+                    else (2**attempt + _SYSTEM_RANDOM.random())
+                )
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_error = exc
-                delay = 2**attempt + random.random()
+                delay = 2**attempt + _SYSTEM_RANDOM.random()
             except httpx.HTTPStatusError as exc:
                 raise ProviderError(f"Provider returned HTTP {exc.response.status_code}") from exc
             if attempt + 1 < self.attempts:

@@ -20,7 +20,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "purchasing_power_squeeze"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(

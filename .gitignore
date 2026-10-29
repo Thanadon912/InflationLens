@@ -15,8 +15,9 @@ instance/
 .env.*
 !.env.example
 
-# Front-end/ Playwright E2E
+# Front-end/ Vite, TypeScript & Playwright E2E
 node_modules/
+*.tsbuildinfo
 playwright-report/
 test-results/
 playwright/.cache/

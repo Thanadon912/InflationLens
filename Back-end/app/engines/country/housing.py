@@ -27,7 +27,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "housing_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 _PAYMENT_PERIODS_PER_YEAR = {"monthly": 12, "quarterly": 4, "annual": 1}
 
@@ -110,6 +110,14 @@ def calculate(
         for v in (property_price_current, property_price_prior_year,
                   mortgage_rate_current, mortgage_rate_prior_year, mortgage_assumptions)
     ):
+        for rate_label, rate_val in (
+            ("mortgage_rate_current", mortgage_rate_current),
+            ("mortgage_rate_prior_year", mortgage_rate_prior_year),
+        ):
+            if not 0.0 <= rate_val <= 1.0:
+                raise DataQualityError(
+                    f"{rate_label} must be an annual decimal ratio in [0, 1] (e.g. 0.065 for 6.5%), got {rate_val}"
+                )
         n_periods = mortgage_assumptions.term_years * mortgage_assumptions.periods_per_year()
         loan_current = mortgage_assumptions.loan_to_value * property_price_current
         loan_prior = mortgage_assumptions.loan_to_value * property_price_prior_year

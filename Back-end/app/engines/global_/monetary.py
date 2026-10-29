@@ -16,13 +16,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean, weighted_geometric_mean_rates
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_monetary_expansion"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(
@@ -46,20 +46,26 @@ def calculate(
     guidelines section 8.2) -- this function never sees raw money-stock
     levels or exchange rates."""
 
-    gdp_ppp_weighted = weighted_arithmetic_mean(country_money_growth_rates, gdp_ppp_weights)
+    aligned_gdp_weights = align_weights_to_values(
+        country_money_growth_rates, gdp_ppp_weights, context=f"{INDICATOR_ID}.gdp_ppp_weights"
+    )
+    gdp_ppp_weighted = weighted_arithmetic_mean(country_money_growth_rates, aligned_gdp_weights)
 
     components = []
     if consumption_ppp_weights:
+        aligned_cons_weights = align_weights_to_values(
+            country_money_growth_rates, consumption_ppp_weights, context=f"{INDICATOR_ID}.consumption_ppp_weights"
+        )
         components.append(
             Component(
                 key="consumption_ppp_weighted",
                 label="Consumption-PPP-Weighted Global Monetary Expansion",
-                value=weighted_arithmetic_mean(country_money_growth_rates, consumption_ppp_weights),
+                value=weighted_arithmetic_mean(country_money_growth_rates, aligned_cons_weights),
                 unit=Unit.PERCENT_YOY,
             )
         )
 
-    geometric = weighted_geometric_mean_rates(country_money_growth_rates, gdp_ppp_weights)
+    geometric = weighted_geometric_mean_rates(country_money_growth_rates, aligned_gdp_weights)
     components.append(
         Component(key="geometric", label="Geometric Global Monetary Expansion", value=geometric, unit=Unit.PERCENT_YOY)
     )

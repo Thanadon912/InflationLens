@@ -18,13 +18,13 @@ from app.engines.shared.aggregation import (
     weighted_arithmetic_mean,
     weighted_geometric_price_relative,
 )
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_consumer_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 DEFAULT_WEIGHT_METHOD = "household_consumption_ppp"
 
 
@@ -60,11 +60,17 @@ def calculate(
     using this period's relative as one link).
     """
 
-    arithmetic_rate = weighted_arithmetic_mean(country_headline_rates, country_weights)
+    aligned_weights = align_weights_to_values(
+        country_headline_rates, country_weights, context=f"{INDICATOR_ID}.country_weights"
+    )
+    arithmetic_rate = weighted_arithmetic_mean(country_headline_rates, aligned_weights)
 
     components: list[Component] = []
     if country_price_relatives:
-        geometric_relative = weighted_geometric_price_relative(country_price_relatives, country_weights)
+        rel_weights = align_weights_to_values(
+            country_price_relatives, country_weights, context=f"{INDICATOR_ID}.country_price_relatives"
+        )
+        geometric_relative = weighted_geometric_price_relative(country_price_relatives, rel_weights)
         components.append(
             Component(
                 key="geometric_period_relative_percent",

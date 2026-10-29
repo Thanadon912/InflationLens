@@ -36,6 +36,27 @@ def z_score(x: float, mu: float, sigma: float) -> float:
     return (x - mu) / sigma
 
 
+def diffusion_z_score(
+    share_percent: float,
+    *,
+    midpoint: float = 50.0,
+    scale: float = 25.0,
+) -> float:
+    """Standardize a bounded diffusion percentage ``[0, 100]`` onto the z-score
+    scale (GLOBAL guidelines section 12.7).
+
+    Centers at the neutral ``50%`` diffusion baseline with ``scale = 25.0``
+    percentage points so ``[0%, 100%]`` maps to ``[-2.0, +2.0]`` standard
+    deviations.
+    """
+
+    if not 0.0 <= share_percent <= 100.0:
+        raise DataQualityError(
+            f"diffusion_z_score: share_percent must be in [0, 100], got {share_percent}"
+        )
+    return z_score(share_percent, midpoint, scale)
+
+
 def composite_score(
     z_values: Mapping[str, float],
     weights: Mapping[str, float],

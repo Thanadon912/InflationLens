@@ -13,7 +13,7 @@ sync_runs -> raw_responses -> normalized_observations
           -> sync_issues
 ```
 
-Raw responses, normalized revisions, and calculated snapshots are append-only. A changed value for the same series and period is retained as a new observation and marked `is_revised`. URLs containing credentials are sanitized before persistence; API status exposes only the database filename, not its host path.
+Raw responses, normalized revisions, and calculated snapshots are append-only. A changed value for the same series and period is retained as a new observation and marked `is_revised`. Provider requests enforce `https://` at the `ResilientClient` boundary, and URLs or exception messages containing credentials (`api_key`, `UserID`, `token`, etc.) are sanitized via `sanitize_url` and `sanitize_text` before persistence in `raw_responses` or `sync_issues`; API status and error responses never expose host filesystem paths. All SQLite queries in `SnapshotStore` use static SQL literals with bound `?` parameters.
 
 ## Configured official sources
 
@@ -38,6 +38,10 @@ The registry deliberately fixes providers and series; runtime code does not choo
 - The cached `latest` result means the latest **complete calculable** period, not necessarily the newest period returned by one source.
 - Provider estimates and provisional ECB observations set `is_estimated` and reduce confidence.
 - Staleness is computed at read time using monthly/quarterly thresholds from the registry.
+- Cached snapshot reads filter by the active `methodology_version` (from `app/config/methodology_versions.yaml`) and optionally `config_version`, ensuring that methodology updates automatically invalidate stale pre-calculated snapshots (`CALCULATION_ENGINE_GUIDELINES.md` section 21).
+- `SnapshotStore` uses SQLite window functions (`ROW_NUMBER() OVER (PARTITION BY ...)`) for latest-observation, cross-sectional component, and multi-variant result queries, paired with a bounded in-process read-through cache invalidated on any database write or WAL file change.
+- Configuration YAML loaders return deep-copied dictionaries (`copy.deepcopy`) so route handlers cannot mutate in-memory `@lru_cache` state.
+- Read-only `GET` endpoints on `/api/v1/data/*`, `/api/v1/measures/*`, `/api/v1/categories/*`, `/api/v1/regions/*`, `/api/v1/world/*`, and `/api/v1/meta/*` emit SHA-256 `ETag` and `Cache-Control` headers and support conditional `If-None-Match` (`304 Not Modified`) responses.
 - Partial optional inputs are declared in coverage/warnings; for example, current broad-money snapshots do not yet add population or real-GDP diagnostics, and economy-wide snapshots currently calculate the GDP deflator rather than a domestic-demand deflator.
 
 ## Live verification on 2026-08-13

@@ -130,12 +130,15 @@ class TestSynchronizationScore:
         score = next(c for c in result.components if c.key == "synchronization_score")
         assert score.is_score is True
         assert score.unit.value == "standard_deviation_score"
-        # Doc formula subtracts dispersion. With the window below, z of
+        # Doc formula standardizes diffusion shares ((S - 50) / 25) and
+        # subtracts standardized dispersion. With the window below, z of
         # current dispersion is negative, so subtracting it raises the score.
         import statistics
         dispersion = statistics.stdev(current.values())
         z_dispersion = (dispersion - statistics.mean(window)) / statistics.stdev(window)
-        expected = 0.4 * 50.0 + 0.4 * 50.0 - 0.2 * z_dispersion
+        z_accel = (50.0 - 50.0) / 25.0
+        z_above = (50.0 - 50.0) / 25.0
+        expected = 0.4 * z_accel + 0.4 * z_above - 0.2 * z_dispersion
         assert score.value == pytest.approx(expected)
 
     def test_absent_without_composite_weights(self):

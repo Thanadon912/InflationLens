@@ -1,0 +1,40 @@
+name: CD (Vercel Production)
+
+# Deploys the merged commit on master directly to the Git-connected Vercel
+# projects (inflation-lens-api-thanadon912 and inflation-lens-thanadon912).
+# CI workflows (backend-ci, e2e-ci, security) run on pull_request before
+# merge and are not repeated on master.
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-vercel-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Vercel (API + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Deploy and promote Git-connected Vercel projects
+        env:
+          VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
+          EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+        run: |
+          python3 scripts/vercel/manage.py deploy \
+            --revision "${GITHUB_SHA}" \
+            --ref "${GITHUB_REF_NAME}"

@@ -1,8 +1,8 @@
 ---
 title: Global Inflation Methodology
 document_id: global-inflation-methodology
-version: 1.0.0
-status: draft
+version: 1.0.2
+status: approved
 language: en
 scope: global
 indicator_count: 8
@@ -206,7 +206,7 @@ Year-over-year global inflation:
 
 ## 3.5 Renormalization for missing countries
 
-If available countries form set \(A_t\):
+If available countries for a given sub-indicator form set \(A_t\):
 
 \[
 w^{*}_{c,t}
@@ -218,7 +218,7 @@ w_{c,t}
 }
 \]
 
-Use only if coverage exceeds a documented threshold.
+This renormalization rule applies uniformly to **both primary and secondary/optional weight mappings** (including `gdp_ppp_weights`, `consumption_ppp_weights`, `population_weights`, `import_share_weights`, `housing_weights`, `commodity_weights`, and `country_weights`). Each sub-calculation must intersect its value mapping with its corresponding weight mapping and renormalize over \(A_t\) whenever coverage exceeds the documented threshold and missing countries are not structurally dominant.
 
 ## 3.6 Recommended coverage thresholds
 
@@ -692,12 +692,12 @@ EMG_{c,t}
 g^{money}_{c,t}-g^{realGDP}_{c,t}
 \]
 
-Then:
+Let \(A_t\) be the set of countries with both \(g^{money}_{c,t}\), \(g^{realGDP}_{c,t}\), and weight \(w_c\). Using renormalized weights \(w^*_c = w_c / \sum_{j \in A_t} w_j\):
 
 \[
 GEMG_t
 =
-\sum_cw_cEMG_{c,t}
+\sum_{c \in A_t}w^*_cEMG_{c,t}
 \]
 
 ## 9.4 Velocity-adjusted formulation
@@ -722,12 +722,12 @@ MP_{c,t}
 g(M_{c,t})+g(V_{c,t})-g(Y_{c,t})
 \]
 
-Global aggregation:
+Global aggregation over the available country set \(A^{MP}_t\) with renormalized weights \(w^*_c\):
 
 \[
 GMP_t
 =
-\sum_cw_cMP_{c,t}
+\sum_{c \in A^{MP}_t}w^*_cMP_{c,t}
 \]
 
 ## 9.5 Interpretation
@@ -1103,19 +1103,39 @@ where:
 
 ## 12.7 Synchronization score
 
-A transparent descriptive score may combine:
+To combine diffusion shares (`[0, 100]%`) with cross-country dispersion (`percent_yoy`) without scale distortion, every component of the Synchronization Score must first be expressed as a dimensionless standard-deviation score (`standard_deviation_score`):
+
+- For bounded diffusion shares \(S_t \in [0, 100]\) (\(ShareAccelerating_t\) and \(ShareAbove_{\tau,t}\)), standardize relative to the neutral \(50\%\) diffusion midpoint with scale \(\sigma_S = 25.0\) percentage points (mapping \([0\%, 100\%] \mapsto [-2\sigma, +2\sigma]\)), or against an empirical historical window \((\mu_S, \sigma_S)\) if provided:
+
+\[
+z(S_t)
+=
+\frac{S_t - 50}{25}
+\]
+
+- For cross-country dispersion \(Dispersion_t\), standardize against its historical window \((\mu_D, \sigma_D)\):
+
+\[
+z(Dispersion_t)
+=
+\frac{Dispersion_t - \mu_D}{\sigma_D}
+\]
+
+Then the composite Synchronization Score is:
 
 \[
 Sync_t
 =
-a\cdot ShareAccelerating_t
+a\cdot z(ShareAccelerating_t)
 +
-b\cdot ShareAbove_{\tau,t}
+b\cdot z(ShareAbove_{\tau,t})
 -
-c\cdot z(Dispersion_t)
+c\cdot z(Dispersion_t),
+\qquad
+a+b+c=1
 \]
 
-This must be labeled a score, not a rate.
+Higher cross-country dispersion indicates divergence rather than synchronization and is therefore subtracted. This composite must be labeled a score (`standard_deviation_score`), not an inflation rate.
 
 ## 12.8 Interpretation
 

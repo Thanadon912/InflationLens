@@ -226,3 +226,14 @@ class TestDataSourcesPublishers:
         assert bls["latest"] == "2026-08-01T00:00:00Z"
         assert bls["next"] is None
         assert "USA" in bls["cov"]
+
+    def test_conditional_etag_returns_304_when_unchanged(self, client):
+        first = client.get("/api/v1/measures/USA")
+        assert first.status_code == 200
+        etag = first.headers.get("ETag")
+        assert etag
+        assert "max-age=60" in first.headers.get("Cache-Control", "")
+
+        second = client.get("/api/v1/measures/USA", headers={"If-None-Match": etag})
+        assert second.status_code == 304
+        assert second.get_data() == b""

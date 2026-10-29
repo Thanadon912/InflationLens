@@ -177,3 +177,67 @@ class TestCorruptCache:
 
         with pytest.raises(CorruptCacheError):
             store.issues()
+
+
+def test_version_aware_cache_filters_methodology_and_config_versions(tmp_path):
+    store = SnapshotStore(tmp_path / "versions.sqlite3")
+    run = store.create_run("USA", "headline_consumer_inflation")
+    store.save_result(
+        run,
+        "USA",
+        "headline_consumer_inflation",
+        "2026-06",
+        {"calculated_at": "2026-07-01T00:00:00Z", "methodology_version": "1.0.1", "config_version": "1.0.0", "value": 2.9},
+        ["2026-07-01"],
+        measure_id="cpi",
+    )
+    store.save_result(
+        run,
+        "USA",
+        "headline_consumer_inflation",
+        "2026-07",
+        {"calculated_at": "2026-08-01T00:00:00Z", "methodology_version": "1.0.1", "config_version": "1.0.0", "value": 3.4},
+        ["2026-08-01"],
+        measure_id="cpi",
+    )
+
+    assert store.get_result("USA", "headline_consumer_inflation", methodology_version="1.0.2") is None
+    assert store.get_result("USA", "headline_consumer_inflation", methodology_version="1.0.1", config_version="1.0.0")["result"]["value"] == 3.4
+    assert store.get_result("USA", "headline_consumer_inflation", methodology_version="1.0.1", config_version="2.0.0") is None
+
+    assert store.list_latest_results("USA", "headline_consumer_inflation", methodology_version="1.0.2") == []
+    latest_v101 = store.list_latest_results("USA", "headline_consumer_inflation", methodology_version="1.0.1", config_version="1.0.0")
+    assert len(latest_v101) == 1
+    assert latest_v101[0]["result"]["value"] == 3.4
+
+
+def test_read_cache_immutability_invalidation_and_lru_eviction(tmp_path, monkeypatch):
+    import app.data.store as store_mod
+
+    store = SnapshotStore(tmp_path / "read-cache.sqlite3")
+    run = store.create_run("USA", "headline_consumer_inflation")
+    _seed_result(store, run, "USA", "headline_consumer_inflation", "2026-07", measure_id="cpi", value=3.4)
+
+    first = store.get_result("USA", "headline_consumer_inflation", "2026-07", measure_id="cpi")
+    first["result"]["value"] = 999.0  # caller mutates returned dict
+    second = store.get_result("USA", "headline_consumer_inflation", "2026-07", measure_id="cpi")
+    assert second["result"]["value"] == 3.4  # cached copy is uncorrupted
+
+    # Repeated calls hit the in-memory read cache for list_latest_results, latest_observations, and latest_by_component
+    assert len(store.list_latest_results("USA", "headline_consumer_inflation")) == 1
+    assert len(store.list_latest_results("USA", "headline_consumer_inflation")) == 1
+
+    mapping = {"provider": "world_bank", "series_id": "FP.CPI.TOTL.ZG", "indicator_id": "median_country_inflation", "role": "country_rates", "geography": "GLOBAL", "component_id": "USA", "frequency": "annual", "unit": "percent_yoy"}
+    store.save_point(run, None, SourcePoint(mapping, "2024", 3.0))
+    assert len(store.latest_observations("GLOBAL", "median_country_inflation", "country_rates")) == 1
+    assert len(store.latest_observations("GLOBAL", "median_country_inflation", "country_rates")) == 1
+    assert len(store.latest_by_component("GLOBAL", "median_country_inflation", "country_rates")) == 1
+    assert len(store.latest_by_component("GLOBAL", "median_country_inflation", "country_rates")) == 1
+
+    # Bounded LRU cache eviction
+    monkeypatch.setattr(store_mod, "_READ_CACHE_MAX_ENTRIES", 2)
+    store_mod._cache_put(("k1",), {"a": 1})
+    store_mod._cache_put(("k2",), {"a": 2})
+    store_mod._cache_put(("k3",), {"a": 3})
+    assert len(store_mod._READ_CACHE) == 2
+    assert ("k1",) not in store_mod._READ_CACHE

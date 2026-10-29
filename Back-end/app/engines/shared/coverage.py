@@ -16,7 +16,30 @@ from collections.abc import Iterable, Mapping
 from decimal import Decimal
 
 from app.engines.shared.errors import CoverageThresholdError, InvalidWeightError
+from app.engines.shared.validation import validate_weights
 from app.models.coverage import CoverageReport
+
+
+def align_weights_to_values(
+    values: Mapping[str, float],
+    weights: Mapping[str, float],
+    *,
+    context: str = "",
+) -> dict[str, float]:
+    """Validate ``weights`` and renormalize over the keys present in ``values``.
+
+    Ensures that:
+    1. ``weights`` is a valid weight distribution (non-negative, sums to 1.0).
+    2. Every key in ``values`` exists in ``weights``; otherwise raises
+       :class:`InvalidWeightError`.
+    3. When ``values`` covers a proper subset of ``weights``, weights are
+       renormalized over ``values.keys()`` per GLOBAL guidelines section 3.5.
+    """
+
+    validate_weights(weights, context=context)
+    if set(values) == set(weights):
+        return dict(weights)
+    return renormalize_weights(weights, values.keys())
 
 
 def renormalize_weights(

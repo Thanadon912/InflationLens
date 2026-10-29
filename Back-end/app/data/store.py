@@ -1,20 +1,60 @@
 from __future__ import annotations
 
+import copy
 import gzip
 import json
 import os
 import sqlite3
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.providers.base import FetchBundle, SourcePoint, utc_now
+from app.providers.base import FetchBundle, SourcePoint, sanitize_text, utc_now
 
 # Sentinel distinguishing "do not filter on this column" from the legitimate
 # filter value ``None`` (== "only rows where the column IS NULL"), needed by
 # SnapshotStore.list_latest_results below.
 _UNSET = object()
+
+# Process-local cache of already-initialized SQLite files (path, st_dev, st_ino)
+# so per-request SnapshotStore() instantiations skip redundant DDL/migration
+# checks once a database file has been verified.
+_INITIALIZED_DB_FILES: set[tuple[str, int, int]] = set()
+_WRITE_GEN: dict[str, int] = {}
+_READ_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
+_READ_CACHE_MAX_ENTRIES = 256
+
+
+def _db_file_identity(path: Path) -> tuple[str, int, int] | None:
+    if not path.exists():
+        return None
+    st = path.stat()
+    return None if st.st_size == 0 else (str(path), st.st_dev, st.st_ino)
+
+
+def _db_state_token(path: Path) -> tuple[Any, ...]:
+    key = str(path)
+    gen = _WRITE_GEN.get(key, 0)
+    st = path.stat()
+    wal_path = Path(f"{path}-wal")
+    wal_sig = (wal_path.stat().st_mtime_ns, wal_path.stat().st_size) if wal_path.exists() else (0, 0)
+    return (key, gen, (st.st_ino, st.st_mtime_ns, st.st_size), wal_sig)
+
+
+def _cache_get(cache_key: tuple[Any, ...]) -> tuple[bool, Any]:
+    if cache_key in _READ_CACHE:
+        _READ_CACHE.move_to_end(cache_key)
+        return True, copy.deepcopy(_READ_CACHE[cache_key])
+    return False, None
+
+
+def _cache_put(cache_key: tuple[Any, ...], value: Any) -> None:
+    _READ_CACHE[cache_key] = copy.deepcopy(value)
+    _READ_CACHE.move_to_end(cache_key)
+    while len(_READ_CACHE) > _READ_CACHE_MAX_ENTRIES:
+        _READ_CACHE.popitem(last=False)
 
 
 class CorruptCacheError(RuntimeError):
@@ -55,6 +95,7 @@ CREATE TABLE IF NOT EXISTS normalized_observations (
   validation_status TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS ix_obs_lookup ON normalized_observations(geography, indicator_id, role, observation_period, retrieved_at);
+CREATE INDEX IF NOT EXISTS ix_obs_component ON normalized_observations(geography, indicator_id, role, component_id, observation_period, retrieved_at);
 CREATE TABLE IF NOT EXISTS observation_lineage (
   derived_observation_id TEXT NOT NULL REFERENCES normalized_observations(id),
   source_observation_id TEXT NOT NULL REFERENCES normalized_observations(id),
@@ -87,9 +128,12 @@ class SnapshotStore:
         if not self.path.is_absolute():
             self.path = Path.cwd() / self.path
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.connect() as db:
-            db.executescript(SCHEMA)
-            self._migrate_indicator_results(db)
+        identity = _db_file_identity(self.path)
+        if identity is None or identity not in _INITIALIZED_DB_FILES:
+            with self.connect() as db:
+                db.executescript(SCHEMA)
+                self._migrate_indicator_results(db)
+            _INITIALIZED_DB_FILES.add(_db_file_identity(self.path))  # type: ignore[arg-type]
 
     def _migrate_indicator_results(self, db: sqlite3.Connection) -> None:
         """Add the measure_id/region_id dimension to a pre-existing database.
@@ -151,6 +195,8 @@ class SnapshotStore:
             yield db
             db.commit()
         finally:
+            if db.total_changes > 0:
+                _WRITE_GEN[str(self.path)] = _WRITE_GEN.get(str(self.path), 0) + 1
             db.close()
 
     def create_run(self, geography: str, indicator: str) -> str:
@@ -195,26 +241,36 @@ class SnapshotStore:
 
     def add_issue(self, run_id: str, code: str, message: str, *, severity: str = "error", provider: str | None = None, geography: str | None = None, indicator_id: str | None = None, details: dict | None = None) -> str:
         issue_id = str(uuid.uuid4())
+        safe_message = sanitize_text(message)
         with self.connect() as db:
-            db.execute("INSERT INTO sync_issues VALUES(?,?,?,?,?,?,?,?,?,?)", (issue_id, run_id, severity, provider, geography, indicator_id, code, message, json.dumps(details or {}, sort_keys=True), utc_now()))
+            db.execute("INSERT INTO sync_issues VALUES(?,?,?,?,?,?,?,?,?,?)", (issue_id, run_id, severity, provider, geography, indicator_id, code, safe_message, json.dumps(details or {}, sort_keys=True), utc_now()))
         return issue_id
 
     def latest_observations(self, geography: str, indicator_id: str, role: str | None = None) -> list[dict[str, Any]]:
-        params: list[Any] = [geography, indicator_id]
-        where = "geography=? AND indicator_id=?"
-        if role:
-            where += " AND role=?"
-            params.append(role)
+        cache_key = ("latest_observations", _db_state_token(self.path), geography, indicator_id, role)
+        hit, cached = _cache_get(cache_key)
+        if hit:
+            return cached
+        query = (
+            "SELECT * FROM ("
+            "  SELECT *, rowid AS _orig_rowid, ROW_NUMBER() OVER ("
+            "    PARTITION BY role, component_id, source_series_id, observation_period "
+            "    ORDER BY retrieved_at DESC, rowid DESC"
+            "  ) AS _rn "
+            "  FROM normalized_observations "
+            "  WHERE geography=? AND indicator_id=? AND (? IS NULL OR role=?)"
+            ") WHERE _rn = 1 ORDER BY retrieved_at DESC, _orig_rowid DESC"
+        )
         with self.connect() as db:
-            # Reviewed (bandit B608): `where` above is assembled from string literals carrying
-            # only `?` placeholders -- every caller-supplied value binds through `params`.
-            rows = db.execute(f"SELECT * FROM normalized_observations WHERE {where} ORDER BY retrieved_at DESC, rowid DESC", params).fetchall()  # nosec B608
-        latest: dict[tuple, dict] = {}
+            rows = db.execute(query, (geography, indicator_id, role, role)).fetchall()
+        result: list[dict[str, Any]] = []
         for row in rows:
             item = dict(row)
-            key = (item["role"], item["component_id"], item["source_series_id"], item["observation_period"])
-            latest.setdefault(key, item)
-        return list(latest.values())
+            item.pop("_rn", None)
+            item.pop("_orig_rowid", None)
+            result.append(item)
+        _cache_put(cache_key, result)
+        return copy.deepcopy(result)
 
     def latest_retrieval_by_provider(self) -> dict[str, str]:
         """The most recent ``retrieved_at`` timestamp raw-response fetched
@@ -237,13 +293,30 @@ class SnapshotStore:
         year for every country rather than just each country's newest one.
         """
 
-        latest: dict[str, dict] = {}
-        for row in self.latest_observations(geography, indicator_id, role):
-            key = row["component_id"]
-            current = latest.get(key)
-            if current is None or row["observation_period"] > current["observation_period"]:
-                latest[key] = row
-        return list(latest.values())
+        cache_key = ("latest_by_component", _db_state_token(self.path), geography, indicator_id, role)
+        hit, cached = _cache_get(cache_key)
+        if hit:
+            return cached
+        query = (
+            "SELECT * FROM ("
+            "  SELECT *, rowid AS _orig_rowid, ROW_NUMBER() OVER ("
+            "    PARTITION BY component_id "
+            "    ORDER BY observation_period DESC, retrieved_at DESC, rowid DESC"
+            "  ) AS _rn "
+            "  FROM normalized_observations "
+            "  WHERE geography=? AND indicator_id=? AND role=?"
+            ") WHERE _rn = 1 ORDER BY retrieved_at DESC, _orig_rowid DESC"
+        )
+        with self.connect() as db:
+            rows = db.execute(query, (geography, indicator_id, role)).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            item = dict(row)
+            item.pop("_rn", None)
+            item.pop("_orig_rowid", None)
+            result.append(item)
+        _cache_put(cache_key, result)
+        return copy.deepcopy(result)
 
     def save_result(self, run_id: str, geography: str, indicator_id: str, period: str, result: dict, source_vintages: list[str], *, measure_id: str | None = None, region_id: str | None = None) -> str:
         snapshot_id = str(uuid.uuid4())
@@ -254,7 +327,17 @@ class SnapshotStore:
             )
         return snapshot_id
 
-    def get_result(self, geography: str, indicator_id: str, period: str = "latest", *, measure_id: str | None = None, region_id: str | None = None) -> dict[str, Any] | None:
+    def get_result(
+        self,
+        geography: str,
+        indicator_id: str,
+        period: str = "latest",
+        *,
+        measure_id: str | None = None,
+        region_id: str | None = None,
+        methodology_version: str | None = None,
+        config_version: str | None = None,
+    ) -> dict[str, Any] | None:
         # `headline_consumer_inflation` caches seven US measures side by
         # side (source_registry.yaml); a caller that does not name one
         # gets the primary CPI-U series, matching this indicator's single
@@ -263,22 +346,61 @@ class SnapshotStore:
         # and an unset filter already resolves them correctly.
         if measure_id is None and indicator_id == "headline_consumer_inflation":
             measure_id = "cpi"
-        where = "geography=? AND indicator_id=? AND measure_id IS ? AND region_id IS ?"
-        params: list[Any] = [geography, indicator_id, measure_id, region_id]
-        if period != "latest":
-            where += " AND period=?"
-            params.append(period)
+        cache_key = (
+            "get_result",
+            _db_state_token(self.path),
+            geography,
+            indicator_id,
+            period,
+            measure_id,
+            region_id,
+            methodology_version,
+            config_version,
+        )
+        hit, cached = _cache_get(cache_key)
+        if hit:
+            return cached
+        query = (
+            "SELECT * FROM indicator_results "
+            "WHERE geography=? AND indicator_id=? AND measure_id IS ? AND region_id IS ? "
+            "  AND (? = 'latest' OR period=?) "
+            "  AND (? IS NULL OR methodology_version=?) "
+            "  AND (? IS NULL OR config_version=?) "
+            "ORDER BY period DESC, calculated_at DESC LIMIT 1"
+        )
+        params = (
+            geography,
+            indicator_id,
+            measure_id,
+            region_id,
+            period,
+            period,
+            methodology_version,
+            methodology_version,
+            config_version,
+            config_version,
+        )
         with self.connect() as db:
-            # Reviewed (bandit B608): `where` above is literals only; values bind through `params`.
-            row = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC,calculated_at DESC LIMIT 1", params).fetchone()  # nosec B608
+            row = db.execute(query, params).fetchone()
         if row is None:
+            _cache_put(cache_key, None)
             return None
         item = dict(row)
         item["result"] = _safe_json_loads(item.pop("result_json"), column="result_json", row_id=item.get("id"))
         item["source_vintages"] = _safe_json_loads(item["source_vintages"], column="source_vintages", row_id=item.get("id"))
-        return item
+        _cache_put(cache_key, item)
+        return copy.deepcopy(item)
 
-    def list_latest_results(self, geography: str, indicator_id: str, *, measure_id: Any = _UNSET, region_id: Any = _UNSET) -> list[dict[str, Any]]:
+    def list_latest_results(
+        self,
+        geography: str,
+        indicator_id: str,
+        *,
+        measure_id: Any = _UNSET,
+        region_id: Any = _UNSET,
+        methodology_version: str | None = None,
+        config_version: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Every distinct measure_id/region_id variant cached for this
         geography/indicator, each at its own latest available period.
 
@@ -290,34 +412,74 @@ class SnapshotStore:
         (``None`` filters for that column being unset, not "don't care").
         """
 
-        where = "geography=? AND indicator_id=?"
-        params: list[Any] = [geography, indicator_id]
-        if measure_id is not _UNSET:
-            where += " AND measure_id IS ?"
-            params.append(measure_id)
-        if region_id is not _UNSET:
-            where += " AND region_id IS ?"
-            params.append(region_id)
+        cache_key = (
+            "list_latest_results",
+            _db_state_token(self.path),
+            geography,
+            indicator_id,
+            "__UNSET__" if measure_id is _UNSET else measure_id,
+            "__UNSET__" if region_id is _UNSET else region_id,
+            methodology_version,
+            config_version,
+        )
+        hit, cached = _cache_get(cache_key)
+        if hit:
+            return cached
+        filter_measure = 0 if measure_id is _UNSET else 1
+        measure_val = None if measure_id is _UNSET else measure_id
+        filter_region = 0 if region_id is _UNSET else 1
+        region_val = None if region_id is _UNSET else region_id
+        query = (
+            "SELECT * FROM ("
+            "  SELECT *, rowid AS _orig_rowid, ROW_NUMBER() OVER ("
+            "    PARTITION BY measure_id, region_id "
+            "    ORDER BY period DESC, calculated_at DESC, rowid DESC"
+            "  ) AS _rn "
+            "  FROM indicator_results "
+            "  WHERE geography=? AND indicator_id=? "
+            "    AND (? = 0 OR measure_id IS ?) "
+            "    AND (? = 0 OR region_id IS ?) "
+            "    AND (? IS NULL OR methodology_version=?) "
+            "    AND (? IS NULL OR config_version=?)"
+            ") WHERE _rn = 1 ORDER BY period DESC, calculated_at DESC, _orig_rowid DESC"
+        )
+        params = (
+            geography,
+            indicator_id,
+            filter_measure,
+            measure_val,
+            filter_region,
+            region_val,
+            methodology_version,
+            methodology_version,
+            config_version,
+            config_version,
+        )
         with self.connect() as db:
-            # Reviewed (bandit B608): `where` above is literals only; values bind through `params`.
-            rows = db.execute(f"SELECT * FROM indicator_results WHERE {where} ORDER BY period DESC, calculated_at DESC", params).fetchall()  # nosec B608
-        latest: dict[tuple, dict] = {}
-        for row in rows:
-            key = (row["measure_id"], row["region_id"])
-            latest.setdefault(key, dict(row))
+            rows = db.execute(query, params).fetchall()
         results = []
-        for item in latest.values():
+        for row in rows:
+            item = dict(row)
+            item.pop("_rn", None)
+            item.pop("_orig_rowid", None)
             item["result"] = _safe_json_loads(item.pop("result_json"), column="result_json", row_id=item.get("id"))
             item["source_vintages"] = _safe_json_loads(item["source_vintages"], column="source_vintages", row_id=item.get("id"))
             results.append(item)
-        return results
+        _cache_put(cache_key, results)
+        return copy.deepcopy(results)
 
     def status(self) -> dict[str, Any]:
+        counts_query = (
+            "SELECT "
+            "  (SELECT COUNT(*) FROM raw_responses) AS raw_responses, "
+            "  (SELECT COUNT(*) FROM normalized_observations) AS normalized_observations, "
+            "  (SELECT COUNT(*) FROM indicator_results) AS indicator_results, "
+            "  (SELECT COUNT(*) FROM sync_issues) AS sync_issues"
+        )
         with self.connect() as db:
             run = db.execute("SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT 1").fetchone()
-            # Reviewed (bandit B608): the table names are the hardcoded tuple on the next line, never caller input.
-            counts = {name: db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] for name in ("raw_responses", "normalized_observations", "indicator_results", "sync_issues")}  # nosec B608
-        return {"database": self.path.name, "latest_run": dict(run) if run else None, "counts": counts}
+            counts_row = db.execute(counts_query).fetchone()
+        return {"database": self.path.name, "latest_run": dict(run) if run else None, "counts": dict(counts_row)}
 
     def issues(self, run_id: str | None = None) -> list[dict[str, Any]]:
         with self.connect() as db:

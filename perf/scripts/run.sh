@@ -114,7 +114,7 @@ else
   # file rather than the terminal, so k6's progress stays readable.
   (
     cd "$BACKEND_DIR"
-    INFLATION_DB_PATH="$DB_PATH" LOG_LEVEL=WARNING exec "$BACKEND_DIR/.venv/bin/gunicorn" \
+    INFLATION_DB_PATH="$DB_PATH" RATE_LIMIT_ENABLED="${RATE_LIMIT_ENABLED:-0}" LOG_LEVEL=WARNING exec "$VENV_PYTHON" -m gunicorn \
       --workers "$WORKERS" --worker-class gthread --threads "$THREADS" \
       --bind "127.0.0.1:$PORT" --log-level warning \
       'app:create_app()'

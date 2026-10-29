@@ -34,6 +34,12 @@ class TestLoadYaml:
         data = load_yaml(p)
         assert data == {"key": "value", "num": 1}
 
+    def test_nested_mutation_does_not_corrupt_lru_cache(self):
+        first = load_indicator_registry()
+        first["country"]["headline_consumer_inflation"]["mutated_field"] = "polluted"
+        second = load_indicator_registry()
+        assert "mutated_field" not in second["country"]["headline_consumer_inflation"]
+
 
 class TestBundledConfigFiles:
     def test_indicator_registry_has_10_country_and_8_global(self):
@@ -46,7 +52,7 @@ class TestBundledConfigFiles:
         assert len(versions["country"]) == 10
         assert len(versions["global"]) == 8
         for v in {**versions["country"], **versions["global"]}.values():
-            assert v == "1.0.1"
+            assert v == "1.0.2"
 
     def test_global_weights_has_coverage_thresholds(self):
         weights = load_global_weights()

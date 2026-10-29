@@ -11,13 +11,18 @@ from typing import Any
 from app.api.blueprint import _calculate_country
 from app.api.country import HANDLERS
 from app.api.util import now_iso
-from app.config.loader import load_country_profile, load_source_registry
+from app.config.loader import (
+    available_country_profiles,
+    load_country_profile,
+    load_methodology_versions,
+    load_source_registry,
+)
 from app.data.store import SnapshotStore
 from app.engines.shared.growth import year_over_year
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import IndicatorResult
 from app.models.methodology import InputProvenance
-from app.providers.base import ProviderError, ProviderSchemaError, ResilientClient, SourcePoint, utc_now
+from app.providers.base import ProviderError, ProviderSchemaError, ResilientClient, SourcePoint, sanitize_text, utc_now
 from app.providers import fetch_provider
 
 logger = logging.getLogger("inflation_engine.ingestion")
@@ -68,9 +73,10 @@ class IngestionService:
                 successes += 1
             except Exception as exc:  # isolate each source mapping/batch
                 failures += 1
-                self.store.add_issue(run_id, "PROVIDER_FETCH_FAILED", str(exc), provider=provider, geography=provider_mappings[0].get("geography"), indicator_id=provider_mappings[0].get("indicator_id"))
+                self.store.add_issue(run_id, "PROVIDER_FETCH_FAILED", sanitize_text(str(exc)), provider=provider, geography=provider_mappings[0].get("geography"), indicator_id=provider_mappings[0].get("indicator_id"))
                 logger.warning("provider sync failed provider=%s error=%s", provider, type(exc).__name__)
-        for geo in sorted({m["geography"] for m in mappings}):
+        country_profiles = set(available_country_profiles())
+        for geo in sorted({m["geography"] for m in mappings if m["geography"] in country_profiles}):
             self._derive_essential(run_id, geo)
             self._cross_source_checks(run_id, geo)
             for indicator_id in SUPPORTED_INDICATORS:
@@ -79,7 +85,7 @@ class IngestionService:
                 try:
                     self.calculate_available(run_id, geo, indicator_id)
                 except Exception as exc:
-                    self.store.add_issue(run_id, "CALCULATION_FAILED", str(exc), geography=geo, indicator_id=indicator_id)
+                    self.store.add_issue(run_id, "CALCULATION_FAILED", sanitize_text(str(exc)), geography=geo, indicator_id=indicator_id)
         self.store.finish_run(run_id, successes=successes, failures=failures)
         return {"run_id": run_id, "status": "success" if failures == 0 else "partial" if successes else "failed", "successes": successes, "failures": failures, "issues": self.store.issues(run_id)}
 
@@ -93,7 +99,7 @@ class IngestionService:
                 count = sum(len(bundle.points) for bundle in bundles)
                 checks.append({"provider": mapping["provider"], "series_id": mapping["series_id"], "status": "ok", "observations": count})
             except Exception as exc:
-                checks.append({"provider": mapping["provider"], "series_id": mapping["series_id"], "status": "failed", "error": str(exc)})
+                checks.append({"provider": mapping["provider"], "series_id": mapping["series_id"], "status": "failed", "error": sanitize_text(str(exc))})
         return {"status": "ok" if all(c["status"] == "ok" for c in checks) else "partial", "checks": checks}
 
     def _derive_essential(self, run_id: str, geography: str) -> None:
@@ -165,7 +171,14 @@ class IngestionService:
             if not rows:
                 continue
             if mapping.get("is_rate"):
-                calculated += self._save_published_rate(run_id, geography, measure_id, region_id, rows[:limit])
+                calculated += self._save_published_rate(
+                    run_id,
+                    geography,
+                    measure_id,
+                    region_id,
+                    rows[:limit],
+                    config_version=profile.get("profile_version"),
+                )
                 continue
             periods = {r["observation_period"] for r in rows}
             complete = {period for period in periods if _year_before(period) in periods}
@@ -181,12 +194,22 @@ class IngestionService:
                     self.store.add_issue(run_id, "PERIOD_UNAVAILABLE", str(exc), severity="warning", geography=geography, indicator_id="headline_consumer_inflation", details={"period": period, "measure_id": measure_id, "region_id": region_id})
         return calculated
 
-    def _save_published_rate(self, run_id: str, geography: str, measure_id: str | None, region_id: str | None, rows: list[dict]) -> int:
+    def _save_published_rate(
+        self,
+        run_id: str,
+        geography: str,
+        measure_id: str | None,
+        region_id: str | None,
+        rows: list[dict],
+        *,
+        config_version: str | None = None,
+    ) -> int:
         """Trimmed-mean PCE (and anything else marked ``is_rate: true``):
         the publisher issues a percent-change series with no underlying
         index, so there is nothing for the engine to recompute. Stored and
         served exactly as published, method='published_rate'."""
 
+        methodology_version = load_methodology_versions()["country"]["headline_consumer_inflation"]
         calculated = 0
         for row in rows:
             provenance = (InputProvenance(provider=row["provider"], series_id=row["source_series_id"], source_url=row["source_url"], data_vintage=row["data_vintage"], retrieved_at=row["retrieved_at"]),)
@@ -197,7 +220,8 @@ class IngestionService:
                 value=row["value"],
                 unit=Unit.PERCENT_YOY,
                 method="published_rate",
-                methodology_version="1.0.1",
+                methodology_version=methodology_version,
+                config_version=config_version,
                 input_series=provenance,
                 coverage=Coverage.FULL,
                 confidence=Confidence.LOW if row["is_estimated"] else Confidence.HIGH,

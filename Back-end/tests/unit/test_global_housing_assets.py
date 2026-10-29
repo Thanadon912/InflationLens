@@ -41,6 +41,21 @@ class TestSeparationFromConsumerInflation:
         expected = 0.6 * usa_infl + 0.4 * ea_infl
         assert house.value == pytest.approx(expected)
 
+    def test_partial_country_coverage_renormalizes_secondary_weights(self):
+        result = gha.calculate(
+            **base_kwargs(
+                country_house_price_current={"USA": 110.0},
+                country_house_price_prior={"USA": 100.0},
+                housing_weights={"USA": 0.6, "EA": 0.4},
+                country_rent_rates={"USA": 4.0},
+                consumption_ppp_weights={"USA": 0.5, "EA": 0.5},
+            )
+        )
+        house = next(c for c in result.components if c.key == "house_price")
+        rent = next(c for c in result.components if c.key == "rent")
+        assert house.value == pytest.approx(10.0)
+        assert rent.value == pytest.approx(4.0)
+
 
 class TestOptionalComponents:
     def test_equity_present_when_given(self):

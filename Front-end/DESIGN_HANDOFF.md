@@ -6,12 +6,14 @@ Inflation Lens is a data product that computes inflation across every published 
 - **Landing page** — hero + search console, a scroll-pinned two-act map showcase (line-drawn world → United States at state resolution), an engine explainer, and a full source ledger.
 - **Workbench** — the working screen: search, a seven-measure spread axis, measure cards, category and state tables, a user-weighted basket recompute, and a per-screen provenance rail.
 
-## About the design files
-The files in this bundle are **design references created in HTML** — prototypes showing intended look and behaviour, not production code to ship. The task is to **recreate them in the target codebase's environment** (React/Next, Vue, etc.) using its established patterns, then wire the data layer to the real engine. If no frontend exists yet, pick the framework that fits the backend and implement there.
+## About the architecture (React + TypeScript + Vite)
+The frontend has been migrated from the initial static HTML/vanilla-JS prototype to a **React 19 + TypeScript + Vite** multi-page application (`index.html` and `app.html`) while preserving 100% of the Industry design system tokens, D3/TopoJSON technical map projections, scroll-pinned showcase variables, and Playwright E2E test contracts.
 
-Two things in the bundle ARE production-grade and should carry over as-is:
-1. **`data.js`** — the data contract (see *Backend integration* below). Replace its literal values with API responses; keep the shape.
-2. **`showcase.js`** — the map projection + scroll-progress logic. The d3-geo projection setup, the two-layer zoom transition, and the progress→CSS-variable mapping are worth porting rather than reinventing.
+Key TypeScript modules in `src/`:
+1. **`src/types/lens.ts`** — Strict TypeScript interfaces for all Backend API responses (`/measures/{geo}`, `/categories/{geo}`, `/regions/us`, `/world/cross-section`, `/meta/data-sources`, `/resolve`) and the normalized `window.LENS` frontend domain contract.
+2. **`src/api/lensClient.ts`** — Typed API client (`loadLensData`, `resolveEntity`, `initializeGlobalLensBridge`) replacing the legacy `data.js`.
+3. **`src/components/landing/ShowcaseStage.tsx`** — React component encapsulating the D3 (`d3-geo`) + `topojson-client` world and US state choropleth projections and the `requestAnimationFrame`-throttled scroll-progress CSS variable engine (`--a1`, `--wo`, `--uo`, `--us`, `--a2`, `--rev`), replacing the legacy `showcase.js`.
+4. **`src/pages/LandingPage.tsx` & `src/pages/WorkbenchPage.tsx`** — Full React page components for the Landing Page (`index.html`) and Workbench (`app.html`), including live entity resolution, geography/window/adjustment rails, greedy row-staggered spread axis, basket reweighting, and CSV export.
 
 ## Fidelity
 **High-fidelity.** Final colours, typography, spacing and interactions. Recreate pixel-accurately using the codebase's existing primitives. All values are tokens from the Industry design system (`../../styles.css`); the token list is at the end of this README.

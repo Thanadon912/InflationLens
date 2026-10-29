@@ -13,7 +13,7 @@ class TestHealthAndMeta:
     def test_methodology_versions(self, client):
         r = client.get("/api/v1/meta/methodology")
         data = r.get_json()
-        assert data["country"]["headline_consumer_inflation"] == "1.0.1"
+        assert data["country"]["headline_consumer_inflation"] == "1.0.2"
 
     def test_global_weights_config(self, client):
         r = client.get("/api/v1/meta/global-weights")
@@ -38,3 +38,13 @@ class TestHealthAndMeta:
         r = client.get("/api/v1/nonexistent")
         assert r.status_code == 404
         assert "error" in r.get_json()
+
+    def test_meta_conditional_etag_returns_304(self, client):
+        first = client.get("/api/v1/meta/indicators")
+        assert first.status_code == 200
+        etag = first.headers.get("ETag")
+        assert etag
+        assert "max-age=300" in first.headers.get("Cache-Control", "")
+
+        second = client.get("/api/v1/meta/indicators", headers={"If-None-Match": etag})
+        assert second.status_code == 304

@@ -60,12 +60,22 @@ class TestPerCapita:
         comp = next(c for c in result.components if c.key == "per_capita_growth")
         assert comp.value == pytest.approx(expected)
 
-    def test_missing_population_marks_partial(self):
+    @pytest.mark.parametrize(
+        "pop_kwargs",
+        [
+            {},
+            {"population_current": 331.0},
+            {"population_prior_year": 329.0},
+        ],
+    )
+    def test_missing_or_partial_population_marks_partial_without_crashing(self, pop_kwargs):
         result = bm.calculate(
             money_current=21500.0, money_prior_year=20000.0, aggregate_name="M2",
             geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
+            **pop_kwargs,
         )
         assert result.coverage == Coverage.PARTIAL
+        assert not any(c.key == "per_capita_growth" for c in result.components)
         assert any("per_capita_growth unavailable" in w for w in result.warnings)
 
 
@@ -82,3 +92,20 @@ class TestMoneyToOutputRatio:
         g_m = (21500.0 / 20000.0 - 1) * 100
         g_y = (25000.0 / 24000.0 - 1) * 100
         assert growth_approx.value == pytest.approx(g_m - g_y)
+
+    @pytest.mark.parametrize(
+        "gdp_kwargs",
+        [
+            {"real_gdp_current": 25000.0},
+            {"real_gdp_prior_year": 24000.0},
+        ],
+    )
+    def test_partial_real_gdp_marks_partial_without_type_error(self, gdp_kwargs):
+        result = bm.calculate(
+            money_current=21500.0, money_prior_year=20000.0, aggregate_name="M2",
+            geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
+            **gdp_kwargs,
+        )
+        assert result.coverage == Coverage.PARTIAL
+        assert not any(c.key == "money_to_real_output_ratio" for c in result.components)
+        assert any("money_to_real_output_ratio unavailable" in w for w in result.warnings)

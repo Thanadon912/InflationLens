@@ -1,0 +1,11 @@
+.env
+.env.*
+.venv
+.cache
+__pycache__
+.pytest_cache
+.hypothesis
+.coverage
+htmlcov
+instance
+tests

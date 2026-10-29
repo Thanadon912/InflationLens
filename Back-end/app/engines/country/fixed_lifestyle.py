@@ -26,7 +26,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "fixed_lifestyle_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 # COUNTRY guidelines section 7.5 product-replacement hierarchy, most to
 # least confident.
@@ -130,14 +130,19 @@ def calculate(
         for item in sorted(quantities_base)
     )
 
-    # Shrinkflation-adjusted unit price (COUNTRY guidelines section 7.6).
+    # Shrinkflation-adjusted unit price & basket index (COUNTRY guidelines section 7.6).
     unit_price_components: list[Component] = []
+    shrinkflation_index_components: list[Component] = []
     if package_sizes_current and package_sizes_base:
+        effective_prices_current = dict(prices_current)
         for item in sorted(set(package_sizes_current) & set(package_sizes_base) & set(prices_current) & set(prices_base)):
             validate_positive_index(package_sizes_current[item], context=f"{INDICATOR_ID}.package_sizes_current[{item}]")
             validate_positive_index(package_sizes_base[item], context=f"{INDICATOR_ID}.package_sizes_base[{item}]")
             u_t = prices_current[item] / package_sizes_current[item]
             u_0 = prices_base[item] / package_sizes_base[item]
+            effective_prices_current[item] = prices_current[item] * (
+                package_sizes_base[item] / package_sizes_current[item]
+            )
             unit_price_components.append(
                 Component(
                     key=f"unit_price_{item}",
@@ -146,6 +151,17 @@ def calculate(
                     unit=Unit.PERCENT_YOY,
                 )
             )
+        fli_shrinkflation_adjusted = laspeyres_price_index(
+            effective_prices_current, prices_base, quantities_base
+        )
+        shrinkflation_index_components.append(
+            Component(
+                key="fli_shrinkflation_adjusted",
+                label="Shrinkflation-adjusted fixed-basket price index",
+                value=fli_shrinkflation_adjusted,
+                unit=Unit.INDEX,
+            )
+        )
 
     # Replacement coverage and quality confidence (COUNTRY guidelines
     # section 7.5/7.7).
@@ -190,6 +206,7 @@ def calculate(
             value=fli_quality_adjusted,
             unit=Unit.INDEX,
         ),
+        *shrinkflation_index_components,
         Component(
             key="replacement_coverage_percent",
             label="Replacement coverage",

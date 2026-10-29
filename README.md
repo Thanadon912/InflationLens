@@ -1,6 +1,6 @@
 # Inflation Lens
 
-A multi-dimensional inflation engine: a deterministic Python/Flask API that computes ten country-level and eight global inflation lenses from normalized economic observations, paired with a static front end that visualizes them.
+A multi-dimensional inflation engine: a deterministic Python/Flask API that computes ten country-level and eight global inflation lenses from normalized economic observations, paired with a React 19 + TypeScript + Vite front end that visualizes them.
 
 Instead of reporting a single "official" inflation number, it exposes the different ways inflation can be measured -- headline consumer prices, a fixed real-world basket, excess money growth, housing and asset prices, producer-price pressure, and more -- so the trade-offs between methodologies are visible rather than hidden behind one index.
 
@@ -8,8 +8,8 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 
 | | |
 |---|---|
-| **Back-end/** | Flask API, calculation engines, official-data ingestion (FRED, BEA, BLS, Eurostat, ECB, World Bank), SQLite-cached reads. See [Back-end/README.md](Back-end/README.md). |
-| **Front-end/** | Static HTML/JS workbench that queries the API and renders the lenses. Playwright end-to-end tests exercise it against a real running backend. |
+| **Back-end/** | Flask API, calculation engines, official-data ingestion (FRED, BEA, BLS, Eurostat, ECB, World Bank), SQLite-cached reads, and in-memory HTTP rate limiting. See [Back-end/README.md](Back-end/README.md). |
+| **Front-end/** | React 19 + TypeScript + Vite landing page and interactive workbench (`d3-geo` + `topojson-client`). Playwright end-to-end tests exercise the production bundle against a real running backend. |
 | **perf/** | k6 load tests against a gunicorn-served API, with a Grafana dashboard built for QA. See [perf/README.md](perf/README.md). |
 | **docs/** | Methodology references: calculation engine guidelines, country and global inflation methods, official data source guide. |
 
@@ -31,11 +31,9 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 
 **Not covered**
 - Model-based underlying inflation and the global common-factor model are explicitly out of scope for v1 (documented, not just missing).
-- No auth, no rate limiting, no multi-tenancy -- the API is open by design, meant for local/demo use, not for exposing publicly as-is.
-- No production deployment setup: no HTTPS termination, no runtime monitoring or alerting. `perf/` does ship a containerized Prometheus/Grafana stack and a gunicorn config, but only for load testing -- the app itself is still not packaged for deployment. SQLite is used as the cache store; the load tests in `perf/` exercise the read path only (they saturate on gunicorn's worker pool, not on the database), so this store is still unproven under the concurrent **write** load a production ingestion schedule would put on it.
-- CI runs on every push and pull request: the backend suite behind its coverage gate, and the Playwright E2E suite against a real Flask process. Dependency, secret, and static-analysis scanning run alongside them (`.github/workflows/security.yml`); the live-provider and load-test jobs run on a schedule instead, each for a reason documented in its workflow.
-- The front end is a static demo workbench (no build pipeline, no framework, no persistence) -- functional and e2e-tested, but not a hardened production UI.
-- No hosted live demo yet; running it means cloning and starting both processes locally (see below).
+- No auth or multi-tenancy -- the API is open by design for read/calculation queries, protected by bounded in-memory per-IP rate limiting (`read` and `calc` buckets, configurable via environment variables) and strict HTTP security headers.
+- No production deployment setup: no HTTPS termination, no runtime monitoring or alerting. `perf/` does ship a containerized Prometheus/Grafana stack (bound to `127.0.0.1`) and a gunicorn config, but only for load testing -- the app itself is still not packaged for deployment. SQLite is used as the cache store; the load tests in `perf/` exercise the read path only (they saturate on gunicorn's worker pool, not on the database), so this store is still unproven under the concurrent **write** load a production ingestion schedule would put on it.
+- CI runs on every pull request: the backend suite behind its coverage gate (`.github/workflows/backend-ci.yml`), the Playwright E2E suite against a real Flask process (`.github/workflows/e2e-ci.yml`), and dependency/secret/SAST scanning (`.github/workflows/security.yml`). Merging to `master` triggers CD directly without repeating CI (`.github/workflows/cd.yml`), deploying and promoting the Git-connected Vercel projects (`inflation-lens-api-thanadon912` and `inflation-lens-thanadon912`) via `scripts/vercel/manage.py`. The live-provider and load-test jobs run on a schedule instead, each for a reason documented in its workflow.
 
 ## Running it locally
 
@@ -48,7 +46,8 @@ python3 -m venv .venv
 
 # Front end (separate terminal, from Front-end/)
 cd Front-end
-python3 -m http.server 3000
+npm install
+npm run dev
 # open http://localhost:3000/index.html
 ```
 

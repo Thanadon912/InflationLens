@@ -75,4 +75,4 @@ purchasing_power:
   income_definition: gross
   wage_measure: mean
 
-methodology_version: "1.0.1"
+methodology_version: "1.0.2"
