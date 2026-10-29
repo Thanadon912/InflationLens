@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 
 API = "https://api.vercel.com"
 REPOSITORY = "Thanadon912/InflationLens"
-PRODUCTION_BRANCH = "master"
+PRODUCTION_BRANCH = "main"
 FRONTEND_PROJECT = "inflation-lens-thanadon912"
 BACKEND_PROJECT = "inflation-lens-api-thanadon912"
 FRONTEND_URL = f"https://{FRONTEND_PROJECT}.vercel.app"
@@ -129,6 +129,12 @@ def upsert_project(token: str, name: str, spec: dict[str, Any]) -> dict[str, Any
         "PATCH",
         f"/v9/projects/{quote(name)}",
         updates,
+    )
+    api_request(
+        token,
+        "PATCH",
+        f"/v9/projects/{quote(name)}/branch",
+        {"branch": PRODUCTION_BRANCH},
     )
     if project is not None:
         print(f"Verified Vercel project {name}")

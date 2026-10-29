@@ -1,12 +1,12 @@
 name: CD (Vercel Production)
 
-# Deploys the merged commit on master directly to the Git-connected Vercel
+# Deploys the merged commit on main directly to the Git-connected Vercel
 # projects (inflation-lens-api-thanadon912 and inflation-lens-thanadon912).
 # CI workflows (backend-ci, e2e-ci, security) run on pull_request before
-# merge and are not repeated on master.
+# merge and are not repeated on main.
 on:
   push:
-    branches: [master, main]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
