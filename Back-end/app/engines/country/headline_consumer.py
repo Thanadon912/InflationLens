@@ -9,7 +9,6 @@ household consumption basket changed?
 
 from __future__ import annotations
 
-import copy
 from app.engines.shared import growth
 from app.engines.shared.errors import EngineError
 from app.engines.shared.periods import Period, yoy_lag
@@ -24,7 +23,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.series import ObservationSeries
 
 INDICATOR_ID = "headline_consumer_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 ACCEPTED_UNITS = (Unit.INDEX,)
 ACCEPTED_FREQUENCIES = (Frequency.MONTHLY, Frequency.QUARTERLY, Frequency.ANNUAL)
 
@@ -109,11 +108,11 @@ def calculate(
 def _try_period_over_period(
     series: ObservationSeries, period: Period, warnings: list[str]
 ) -> tuple[Component, list]:
+    key = "mom" if series.frequency == Frequency.MONTHLY else "period_over_period"
     try:
         prior = require_lagged_observation(series, period, 1, context=f"{INDICATOR_ID}.period_over_period")
         current = require_observation_at(series, period, context=INDICATOR_ID)
         value = growth.period_over_period(current.value, prior.value)
-        key = "mom" if series.frequency == Frequency.MONTHLY else "period_over_period"
         return (
             Component(key=key, label="Period-over-period inflation", value=value, unit=Unit.PERCENT_MOM),
             [prior],
@@ -121,7 +120,7 @@ def _try_period_over_period(
     except EngineError as exc:
         warnings.append(f"period_over_period unavailable: {exc.message}")
         return (
-            Component(key="mom", label="Period-over-period inflation", value=None, unit=Unit.PERCENT_MOM),
+            Component(key=key, label="Period-over-period inflation", value=None, unit=Unit.PERCENT_MOM),
             [],
         )
 

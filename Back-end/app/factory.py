@@ -21,11 +21,21 @@ from app.api.blueprint import calculate_bp
 from app.api.data import data_bp
 from app.api.errors import register_error_handlers
 from app.api.meta import meta_bp
+from app.api.rate_limit import register_rate_limiter
 from app.data.cli import register_data_cli
 
 # Reject request bodies above this size outright, before any JSON parsing
 # or engine work happens (defense against oversized/malicious payloads).
 MAX_CONTENT_LENGTH_BYTES = 2 * 1024 * 1024  # 2 MiB
+
+_SECURITY_HEADERS = (
+    ("X-Content-Type-Options", "nosniff"),
+    ("X-Frame-Options", "DENY"),
+    ("Referrer-Policy", "strict-origin-when-cross-origin"),
+    ("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"),
+    ("Permissions-Policy", "geolocation=(), microphone=(), camera=()"),
+    ("Cross-Origin-Resource-Policy", "cross-origin"),
+)
 
 
 class _StrictJSONProvider(DefaultJSONProvider):
@@ -65,7 +75,14 @@ def create_app() -> Flask:
     app.register_blueprint(calculate_bp, url_prefix="/api/v1")
     app.register_blueprint(data_bp, url_prefix="/api/v1")
 
+    register_rate_limiter(app)
     register_error_handlers(app)
     register_data_cli(app)
+
+    @app.after_request
+    def _apply_security_headers(response):
+        for header, value in _SECURITY_HEADERS:
+            response.headers.setdefault(header, value)
+        return response
 
     return app

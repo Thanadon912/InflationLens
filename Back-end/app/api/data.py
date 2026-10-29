@@ -1,17 +1,33 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
 
 from flask import Blueprint, jsonify, request
 
 from app.api.schemas import SchemaError
-from app.config.loader import load_iso_numeric, load_source_registry, load_us_regions
+from app.config.loader import (
+    load_iso_numeric,
+    load_methodology_versions,
+    load_source_registry,
+    load_us_regions,
+)
 from app.data.service import SUPPORTED_INDICATORS, decorate_snapshot
 from app.data.store import SnapshotStore
 from app.engines.shared.aggregation import unweighted_median
 from app.engines.shared.growth import year_over_year
 
 data_bp = Blueprint("data", __name__)
+
+
+@data_bp.after_request
+def _add_conditional_cache_headers(response):
+    if request.method in ("GET", "HEAD") and response.status_code == 200:
+        digest = hashlib.sha256(response.get_data()).hexdigest()[:32]
+        response.set_etag(digest)
+        response.headers.setdefault("Cache-Control", "public, max-age=60, must-revalidate")
+        return response.make_conditional(request)
+    return response
 
 _VALID_WINDOWS = {"12m", "1m", "6m"}
 _VALID_ADJUSTMENTS = {"as_published", "sa", "nsa"}
@@ -124,7 +140,8 @@ def cached_country_indicator(geography: str, indicator_id: str):
     if indicator_id not in SUPPORTED_INDICATORS:
         return _not_found(f"No cached-provider integration is configured for {indicator_id!r}")
     period = request.args.get("period", "latest")
-    row = SnapshotStore().get_result(geography.upper(), indicator_id, period)
+    methodology_version = load_methodology_versions()["country"][indicator_id]
+    row = SnapshotStore().get_result(geography.upper(), indicator_id, period, methodology_version=methodology_version)
     if row is None:
         return _not_found(f"No data snapshot for {geography.upper()}/{indicator_id}/{period}")
     return jsonify(decorate_snapshot(row, load_source_registry()["defaults"]))
@@ -135,9 +152,10 @@ def cached_country_dashboard(geography: str):
     period = request.args.get("period", "latest")
     store = SnapshotStore()
     defaults = load_source_registry()["defaults"]
+    versions = load_methodology_versions()["country"]
     results = []
     for indicator_id in SUPPORTED_INDICATORS:
-        row = store.get_result(geography.upper(), indicator_id, period)
+        row = store.get_result(geography.upper(), indicator_id, period, methodology_version=versions[indicator_id])
         if row:
             results.append(decorate_snapshot(row, defaults))
         else:
@@ -210,12 +228,27 @@ def measures(geography: str):
 
     store = SnapshotStore()
     defaults = load_source_registry()["defaults"]
+    headline_version = load_methodology_versions()["country"]["headline_consumer_inflation"]
     if period == "latest":
-        rows_by_measure = {row["measure_id"]: row for row in store.list_latest_results(geography, "headline_consumer_inflation", region_id=None)}
+        rows_by_measure = {
+            row["measure_id"]: row
+            for row in store.list_latest_results(
+                geography,
+                "headline_consumer_inflation",
+                region_id=None,
+                methodology_version=headline_version,
+            )
+        }
     else:
         rows_by_measure = {}
         for measure_id in mappings:
-            row = store.get_result(geography, "headline_consumer_inflation", period, measure_id=measure_id)
+            row = store.get_result(
+                geography,
+                "headline_consumer_inflation",
+                period,
+                measure_id=measure_id,
+                methodology_version=headline_version,
+            )
             if row is not None:
                 rows_by_measure[measure_id] = row
 
@@ -263,7 +296,8 @@ def categories(geography: str):
 
     geography = geography.upper()
     period = request.args.get("period", "latest")
-    row = SnapshotStore().get_result(geography, "essential_cost_inflation", period)
+    essential_version = load_methodology_versions()["country"]["essential_cost_inflation"]
+    row = SnapshotStore().get_result(geography, "essential_cost_inflation", period, methodology_version=essential_version)
     if row is None:
         return _not_found(f"No category data for {geography!r}/{period}")
     result = decorate_snapshot(row, load_source_registry()["defaults"])
@@ -282,8 +316,14 @@ def regions_us():
     store = SnapshotStore()
     defaults = load_source_registry()["defaults"]
     regions_cfg = load_us_regions()
+    headline_version = load_methodology_versions()["country"]["headline_consumer_inflation"]
 
-    rows = store.list_latest_results("USA", "headline_consumer_inflation", measure_id="cpi")
+    rows = store.list_latest_results(
+        "USA",
+        "headline_consumer_inflation",
+        measure_id="cpi",
+        methodology_version=headline_version,
+    )
     region_rows = {row["region_id"]: row for row in rows if row["region_id"] is not None}
 
     regions_out: dict[str, float] = {}
@@ -348,7 +388,8 @@ def world_cross_section():
         by_iso[numeric] = row["value"]
         countries.append({"iso3": iso3, "numeric": numeric, "name": row["provider_status"] or iso3, "v": row["value"], "period": row["observation_period"]})
 
-    usa_row = store.get_result("USA", "headline_consumer_inflation", measure_id="cpi")
+    headline_version = load_methodology_versions()["country"]["headline_consumer_inflation"]
+    usa_row = store.get_result("USA", "headline_consumer_inflation", measure_id="cpi", methodology_version=headline_version)
     if usa_row is not None:
         usa_result = decorate_snapshot(usa_row, load_source_registry()["defaults"])
         if usa_result["value"] is not None:

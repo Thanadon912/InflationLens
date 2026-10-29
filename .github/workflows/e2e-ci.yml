@@ -1,18 +1,23 @@
 name: E2E (Playwright)
 
-# Exercises Front-end/ against a real running Flask API -- the layer
-# neither the backend's own pytest suite nor a design review can cover,
-# since nothing in that suite ever loads data.js or the HTML that
-# consumes it. Uses a small deterministic seeded SQLite cache
+# Exercises Front-end/ (React 19 + TypeScript + Vite) against a real running
+# Flask API -- the layer neither the backend's own pytest suite nor a design
+# review can cover. Uses a small deterministic seeded SQLite cache
 # (Back-end/scripts/seed_e2e_db.py), never a live `data sync`.
+#
+# Runs on pull_request (and manual dispatch) only so CI is not repeated
+# redundantly on push to master before CD (.github/workflows/cd.yml) runs.
 on:
-  push:
-    branches: [master]
   pull_request:
     paths:
       - "Front-end/**"
       - "Back-end/**"
       - ".github/workflows/e2e-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
@@ -42,6 +47,10 @@ jobs:
       - name: Install Playwright browsers
         working-directory: Front-end
         run: npx playwright install --with-deps chromium
+
+      - name: Typecheck frontend
+        working-directory: Front-end
+        run: npm run typecheck
 
       - name: Run E2E suite
         working-directory: Front-end

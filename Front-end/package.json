@@ -1,13 +1,32 @@
 {
   "name": "inflation-lens-frontend",
   "private": true,
-  "version": "0.1.0",
-  "description": "E2E tests for the static Inflation Lens frontend against the real Flask API.",
+  "version": "1.0.2",
+  "type": "module",
+  "description": "React + TypeScript frontend for Inflation Lens with Playwright E2E verification.",
   "scripts": {
+    "dev": "vite --port 3000 --strictPort",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 3000 --strictPort",
+    "typecheck": "tsc --noEmit",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui"
   },
+  "dependencies": {
+    "d3-geo": "^3.1.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "topojson-client": "^3.1.0"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.48.0"
+    "@playwright/test": "^1.48.0",
+    "@types/d3-geo": "^3.1.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/topojson-client": "^3.1.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
   }
 }

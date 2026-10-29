@@ -1,10 +1,10 @@
 ---
 title: Inflation Calculation Engine Guidelines
 document_id: inflation-calculation-engine-guidelines
-version: 1.0.0
-status: draft
+version: 1.0.2
+status: approved
 language: en
-last_reviewed: 2026-08-02
+last_reviewed: 2026-10-29
 applies_to:
   country_indicators: 10
   global_indicators: 8
@@ -462,8 +462,9 @@ Z-scores may be used only for analytical scores, not inflation rates.
 ## Required outputs
 
 - year-over-year inflation
-- period-over-period inflation
-- optional annualized momentum
+- period-over-period inflation (`mom` for monthly series, `period_over_period` for quarterly/annual series)
+- optional three-month annualized momentum (`three_month_annualized`, monthly series)
+- optional six-month annualized momentum (`six_month_annualized`, monthly series)
 - source period
 - quality flags
 
@@ -566,9 +567,11 @@ essential_basket:
 
 ## Required calculations
 
-- fixed-basket price index
-- item-level contribution
-- shrinkflation-adjusted unit price
+- fixed-basket price index (`fixed_basket_index`)
+- quality-adjusted fixed-basket price index (`fli_quality_adjusted`)
+- shrinkflation-adjusted fixed-basket price index (`fli_shrinkflation_adjusted`, when package sizes are supplied)
+- item-level contribution (`contribution_{item}`)
+- shrinkflation-adjusted unit price (`unit_price_{item}`)
 - replacement coverage
 - quality confidence
 
@@ -612,7 +615,7 @@ Mortgage calculations must receive assumptions from configuration:
 - loan-to-value ratio
 - loan term
 - repayment frequency
-- representative mortgage rate
+- representative mortgage rate (as an annual decimal ratio in `[0, 1]`, e.g. `0.065` for 6.5% p.a.; values outside `[0, 1]` must raise `DataQualityError`)
 - representative property price
 
 Assumptions must be returned in result metadata.
@@ -908,12 +911,14 @@ A combined asset-pressure score is optional but must disclose standardization an
 - cross-country standard deviation
 - interquartile range
 - optional common-factor result
+- optional standardized synchronization score (`synchronization_score`, combining standardized diffusion shares $z(S_t) = (S_t - 50)/25$ and $-z(Dispersion_t)$ on a common `standard_deviation_score` scale)
 
 ## Rules
 
 - threshold values must be configurable;
 - country count and coverage must always be returned;
-- the common-factor model must be versioned separately.
+- the common-factor model must be versioned separately;
+- diffusion shares must be standardized before combining with standardized dispersion in `synchronization_score`.
 
 ---
 
@@ -1362,11 +1367,13 @@ A methodology change must invalidate affected calculated results.
 
 - Keep secrets in backend environment variables.
 - Never send provider tokens to the frontend.
-- Do not log secrets.
-- Validate all external payloads.
+- Do not log secrets; scrub sensitive query parameters (`api_key`, `UserID`, `token`, etc.) from both stored URLs and exception messages (`sanitize_url` / `sanitize_text`).
+- Enforce `https://` on all outbound provider requests (`ResilientClient`).
+- Validate all external payloads and path parameters (including strict alphanumeric regex validation on geography codes without leaking host filesystem paths).
+- Protect API endpoints with bounded-memory per-client rate limiting (separate `read` and `calc` buckets returning HTTP `429` with `Retry-After` and `X-RateLimit-*` headers) and strict HTTP security headers (`Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`).
 - Limit file and network access in calculation workers.
 - Treat provider text metadata as untrusted input.
-- Escape content before rendering in UI.
+- Escape content before rendering in UI (React JSX auto-escaping) and validate external link schemes (`http:`/`https:` only via `safeExternalUrl` with `rel="noopener noreferrer"`).
 
 ---
 

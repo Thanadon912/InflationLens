@@ -1,12 +1,18 @@
 name: Backend CI
 
+# Runs on pull_request (and manual dispatch) only -- never re-runs
+# redundantly after merge to master, where CD (.github/workflows/cd.yml)
+# deploys the already-verified commit directly to Vercel.
 on:
-  push:
-    branches: [master]
   pull_request:
     paths:
       - "Back-end/**"
       - ".github/workflows/backend-ci.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

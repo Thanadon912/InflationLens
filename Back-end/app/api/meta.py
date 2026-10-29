@@ -7,7 +7,9 @@ captures, what it misses) without hard-coding indicator lists client-side.
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+import hashlib
+
+from flask import Blueprint, jsonify, request
 from app.api.contracts import contract_metadata
 
 from app.config.loader import (
@@ -21,6 +23,19 @@ from app.config.loader import (
 meta_bp = Blueprint("meta", __name__)
 
 
+@meta_bp.after_request
+def _add_conditional_cache_headers(response):
+    if request.method in ("GET", "HEAD") and response.status_code == 200:
+        if request.path.endswith("/health"):
+            response.headers.setdefault("Cache-Control", "no-cache")
+            return response
+        digest = hashlib.sha256(response.get_data()).hexdigest()[:32]
+        response.set_etag(digest)
+        response.headers.setdefault("Cache-Control", "public, max-age=300, must-revalidate")
+        return response.make_conditional(request)
+    return response
+
+
 @meta_bp.get("/health")
 def health():
     return jsonify({"status": "ok"})
@@ -29,10 +44,18 @@ def health():
 @meta_bp.get("/meta/indicators")
 def indicators():
     registry = load_indicator_registry()
-    for scope in ("country", "global"):
-        for indicator_id, definition in registry[scope].items():
-            definition["api_contract"] = contract_metadata(indicator_id)
-    return jsonify(registry)
+    payload = {
+        **registry,
+        "country": {
+            indicator_id: {**definition, "api_contract": contract_metadata(indicator_id)}
+            for indicator_id, definition in registry["country"].items()
+        },
+        "global": {
+            indicator_id: {**definition, "api_contract": contract_metadata(indicator_id)}
+            for indicator_id, definition in registry["global"].items()
+        },
+    }
+    return jsonify(payload)
 
 
 @meta_bp.get("/meta/methodology")

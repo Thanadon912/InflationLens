@@ -1,7 +1,12 @@
 import pytest
 
 from app.engines.shared.errors import DataQualityError
-from app.engines.shared.standardization import composite_score, historical_mean_std, z_score
+from app.engines.shared.standardization import (
+    composite_score,
+    diffusion_z_score,
+    historical_mean_std,
+    z_score,
+)
 
 
 class TestZScore:
@@ -43,3 +48,14 @@ class TestCompositeScore:
     def test_mismatched_keys_raises(self):
         with pytest.raises(DataQualityError):
             composite_score({"a": 1.0}, {"b": 1.0})
+
+
+class TestDiffusionZScore:
+    @pytest.mark.parametrize("share,expected", [(0.0, -2.0), (50.0, 0.0), (75.0, 1.0), (100.0, 2.0)])
+    def test_maps_percentage_bounds_to_sigma_scale(self, share, expected):
+        assert diffusion_z_score(share) == pytest.approx(expected)
+
+    @pytest.mark.parametrize("bad_share", [-0.1, 100.1])
+    def test_out_of_bounds_share_raises(self, bad_share):
+        with pytest.raises(DataQualityError):
+            diffusion_z_score(bad_share)

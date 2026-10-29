@@ -15,7 +15,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.engines.shared.errors import EngineError
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.validation import validate_positive_index
@@ -24,7 +24,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_housing_asset_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(
@@ -62,10 +62,14 @@ def calculate(
         c: year_over_year(country_house_price_current[c], country_house_price_prior[c])
         for c in set(country_house_price_current) & set(country_house_price_prior)
     }
-    global_house_price = weighted_arithmetic_mean(
-        country_house_inflation, {c: housing_weights[c] for c in country_house_inflation}
+    aligned_housing_weights = align_weights_to_values(
+        country_house_inflation, housing_weights, context=f"{INDICATOR_ID}.housing_weights"
     )
-    global_rent = weighted_arithmetic_mean(country_rent_rates, consumption_ppp_weights)
+    global_house_price = weighted_arithmetic_mean(country_house_inflation, aligned_housing_weights)
+    aligned_rent_weights = align_weights_to_values(
+        country_rent_rates, consumption_ppp_weights, context=f"{INDICATOR_ID}.consumption_ppp_weights"
+    )
+    global_rent = weighted_arithmetic_mean(country_rent_rates, aligned_rent_weights)
 
     components = [
         Component(key="house_price", label="Global House-Price Inflation", value=global_house_price, unit=Unit.PERCENT_YOY),

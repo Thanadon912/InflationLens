@@ -76,7 +76,7 @@ GET /api/v1/data/lineage/{snapshot-id}
 GET /api/v1/meta/data-sources
 ```
 
-Configured cached indicators are `headline_consumer_inflation`, `essential_cost_inflation`, `broad_money_expansion`, and `economy_wide_inflation` for `USA` and `EA`. The same country-indicator URL continues to accept `POST` for caller-supplied normalized observations. SQLite defaults to `instance/inflation_lens.sqlite3`; override it with `INFLATION_DB_PATH`. Database files and secrets are ignored by Git.
+Configured cached indicators are `headline_consumer_inflation`, `essential_cost_inflation`, `broad_money_expansion`, and `economy_wide_inflation` for `USA` and `EA`. Cached GET routes enforce active `methodology_version` matching (per `CALCULATION_ENGINE_GUIDELINES.md` section 21) and emit conditional `ETag` / `Cache-Control` headers (`304 Not Modified` on `If-None-Match`). The same country-indicator URL continues to accept `POST` for caller-supplied normalized observations. SQLite defaults to `instance/inflation_lens.sqlite3`; override it with `INFLATION_DB_PATH`. Database files and secrets are ignored by Git.
 
 The source mapping is declarative in `app/config/source_registry.yaml`. See [docs/DATA_INTEGRATION.md](docs/DATA_INTEGRATION.md) for provider behavior, storage lineage, and known data limitations.
 
@@ -122,7 +122,13 @@ POST it to `/api/v1/country/USA/broad_money_expansion`. Mapping inputs contain o
 
 `GET /api/v1/meta/indicators` publishes each indicator's required roles, optional roles, accepted units/frequencies and allowed options. Formula/method/weight selection remains server-configured; requests cannot select a preferred result after seeing the data.
 
-HTTP behavior: malformed contracts return 400, unknown geography/indicator 404, oversized bodies 413, and validly shaped but uncomputable data 422. Dashboard routes return individual unavailable results rather than failing the entire dashboard.
+HTTP behavior: malformed contracts return 400, unknown geography/indicator 404, oversized bodies 413, validly shaped but uncomputable data 422, and rate-limited requests 429 (`RATE_LIMIT_EXCEEDED`). Dashboard routes return individual unavailable results rather than failing the entire dashboard.
+
+### Security and rate limiting
+
+- **Inbound rate limiting** (`app/api/rate_limit.py`): thread-safe, bounded-memory (`RATE_LIMIT_MAX_CLIENTS=4096`) sliding-window limiter with separate quotas for cached reads (`RATE_LIMIT_READ_PER_MINUTE=600`) and CPU-bound calculation `POST` routes (`RATE_LIMIT_CALC_PER_MINUTE=120`) over a `RATE_LIMIT_WINDOW_SECONDS=60` window. Emits `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, and `Retry-After` headers. `GET /api/v1/health` and `OPTIONS` preflight requests are exempt. `X-Forwarded-For` is ignored unless `TRUST_PROXY_HEADERS=1` is explicitly set. Set `RATE_LIMIT_ENABLED=0` when running raw saturation load benchmarks (`perf/scripts/run.sh`).
+- **HTTP security headers** (`app/factory.py`): every response sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Permissions-Policy: geolocation=(), microphone=(), camera=()`, and `Cross-Origin-Resource-Policy: cross-origin`.
+- **Credential and path protection**: provider URLs must use `https://`, credentials (`api_key`, `UserID`, `token`, etc.) are scrubbed from both URLs (`sanitize_url`) and exception messages (`sanitize_text`) before logging or persistence in `sync_issues`, and country profile loading validates geography codes against `^[A-Z0-9_-]{2,16}$` without exposing host filesystem paths on 404 errors.
 
 ## Methodology rules
 

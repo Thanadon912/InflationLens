@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.engines.shared.errors import DataQualityError
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.standardization import composite_score, historical_mean_std, z_score
@@ -29,7 +29,7 @@ from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_producer_pressure"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(
@@ -54,9 +54,18 @@ def calculate(
     methodology_version: str = METHODOLOGY_VERSION,
     config_version: str | None = None,
 ) -> IndicatorResult:
-    ppi_component = weighted_arithmetic_mean(country_ppi_rates, gdp_ppp_weights)
-    import_component = weighted_arithmetic_mean(country_import_rates, import_share_weights)
-    commodity_component = weighted_arithmetic_mean(commodity_rates, commodity_weights)
+    ppi_component = weighted_arithmetic_mean(
+        country_ppi_rates,
+        align_weights_to_values(country_ppi_rates, gdp_ppp_weights, context=f"{INDICATOR_ID}.gdp_ppp_weights"),
+    )
+    import_component = weighted_arithmetic_mean(
+        country_import_rates,
+        align_weights_to_values(country_import_rates, import_share_weights, context=f"{INDICATOR_ID}.import_share_weights"),
+    )
+    commodity_component = weighted_arithmetic_mean(
+        commodity_rates,
+        align_weights_to_values(commodity_rates, commodity_weights, context=f"{INDICATOR_ID}.commodity_weights"),
+    )
 
     components = [
         Component(key="ppi_component", label="Global PPI Component", value=ppi_component, unit=Unit.PERCENT_YOY),

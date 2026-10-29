@@ -15,13 +15,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_essential_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(
@@ -45,11 +45,17 @@ def calculate(
     component when ``population_weights`` is supplied.
     """
 
-    consumption_weighted = weighted_arithmetic_mean(country_essential_rates, consumption_ppp_weights)
+    aligned_cons_weights = align_weights_to_values(
+        country_essential_rates, consumption_ppp_weights, context=f"{INDICATOR_ID}.consumption_ppp_weights"
+    )
+    consumption_weighted = weighted_arithmetic_mean(country_essential_rates, aligned_cons_weights)
 
     components = []
     if population_weights:
-        pop_weighted = weighted_arithmetic_mean(country_essential_rates, population_weights)
+        aligned_pop_weights = align_weights_to_values(
+            country_essential_rates, population_weights, context=f"{INDICATOR_ID}.population_weights"
+        )
+        pop_weighted = weighted_arithmetic_mean(country_essential_rates, aligned_pop_weights)
         components.append(
             Component(
                 key="population_weighted",

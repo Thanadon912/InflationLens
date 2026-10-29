@@ -23,13 +23,18 @@ from app.engines.shared.aggregation import (
 )
 from app.engines.shared.coverage import build_coverage_report, renormalize_weights
 from app.engines.shared.errors import DataQualityError, EngineError
-from app.engines.shared.standardization import composite_score, historical_mean_std, z_score
+from app.engines.shared.standardization import (
+    composite_score,
+    diffusion_z_score,
+    historical_mean_std,
+    z_score,
+)
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_inflation_synchronization"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 COMMON_FACTOR_MODEL_VERSION = "unavailable-v1"
 
 
@@ -140,10 +145,18 @@ def calculate(
                 raise DataQualityError("standardization window requires at least 2 historical values")
             mu, sigma = historical_mean_std(dispersion_standardization_window)
             z_dispersion = z_score(dispersion, mu, sigma)
-            # GLOBAL section 12.7 subtracts dispersion: synchronization is
-            # weaker, not stronger, when cross-country rates spread out.
+            z_accelerating = diffusion_z_score(share_accelerating)
+            z_above = diffusion_z_score(share_above)
+            # GLOBAL section 12.7 standardizes diffusion shares onto the
+            # standard-deviation scale ((S - 50) / 25) and subtracts
+            # standardized dispersion: synchronization is weaker when
+            # cross-country rates spread out.
             sync_score = composite_score(
-                {"share_accelerating": share_accelerating, "share_above_threshold": share_above, "dispersion": -z_dispersion},
+                {
+                    "share_accelerating": z_accelerating,
+                    "share_above_threshold": z_above,
+                    "dispersion": -z_dispersion,
+                },
                 composite_weights,
             )
             components.append(

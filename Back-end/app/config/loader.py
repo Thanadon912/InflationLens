@@ -17,12 +17,15 @@ provider adapters that would fetch live data from external APIs.
 
 from __future__ import annotations
 
+import copy
 from functools import lru_cache
 from pathlib import Path
+import re
 
 import yaml
 
 CONFIG_DIR = Path(__file__).resolve().parent
+_SAFE_GEO_RE = re.compile(r"^[A-Z0-9_-]{2,16}$")
 
 
 class ConfigError(Exception):
@@ -55,9 +58,11 @@ def load_yaml(path: Path | str) -> dict:
     files, not mutated at runtime; a process restart is required to pick up
     a configuration change, which is consistent with ENGINE guidelines
     section 21 treating configuration version as part of the cache key.
+    Returns a deep copy so callers cannot accidentally mutate cached nested
+    structures in memory.
     """
 
-    return dict(_load_yaml_cached(str(Path(path).resolve())))
+    return copy.deepcopy(_load_yaml_cached(str(Path(path).resolve())))
 
 
 def clear_cache() -> None:
@@ -103,13 +108,15 @@ def load_iso_numeric() -> dict:
 
 
 def load_country_profile(geography: str) -> dict:
-    path = CONFIG_DIR / "country_profiles" / f"{geography.upper()}.yaml"
+    clean_geo = geography.strip().upper()
+    if not _SAFE_GEO_RE.match(clean_geo):
+        raise ConfigError(f"No country profile configured for geography {geography!r}")
+    path = CONFIG_DIR / "country_profiles" / f"{clean_geo}.yaml"
     try:
         return load_yaml(path)
     except ConfigError as exc:
         raise ConfigError(
-            f"No country profile configured for geography {geography!r} "
-            f"(expected {path})"
+            f"No country profile configured for geography {geography!r}"
         ) from exc
 
 

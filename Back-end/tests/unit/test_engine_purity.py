@@ -1,8 +1,13 @@
 import ast
 from pathlib import Path
+import re
+
+from app.api import contracts, country, global_
+from app.config import loader
 
 
 ENGINE_ROOT = Path(__file__).parents[2] / "app" / "engines"
+DOCS_ROOT = Path(__file__).parents[3] / "docs"
 FORBIDDEN_IMPORTS = {"requests", "urllib", "httpx", "aiohttp", "socket", "sqlite3", "sqlalchemy", "yaml"}
 
 
@@ -62,3 +67,42 @@ def test_policy_weight_mappings_and_defaults_are_not_hard_coded_in_engines():
                     if "weight" in argument.arg.lower() and isinstance(default, ast.Constant) and isinstance(default.value, (int, float)):
                         violations.append(f"{path.relative_to(ENGINE_ROOT)}:{node.lineno}:{argument.arg}")
     assert violations == []
+
+
+def _parse_frontmatter_version(md_path: Path) -> str:
+    text = md_path.read_text(encoding="utf-8")
+    match = re.search(r"^version:\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$", text, re.MULTILINE)
+    assert match is not None, f"Missing version frontmatter in {md_path}"
+    return match.group(1)
+
+
+def test_architecture_registries_and_documentation_versions_are_synchronized():
+    """Verify that the 10 Country + 8 Global engines, API contracts, config
+    registries, and Markdown methodology documents stay in lockstep."""
+
+    versions_cfg = loader.load_methodology_versions()
+    country_versions = versions_cfg["country"]
+    global_versions = versions_cfg["global"]
+
+    assert len(country.HANDLERS) == 10
+    assert len(global_.HANDLERS) == 8
+    assert set(country.HANDLERS) == set(country_versions)
+    assert set(global_.HANDLERS) == set(global_versions)
+    assert set(country.HANDLERS) | set(global_.HANDLERS) == set(contracts.REQUIRED_ROLES)
+    assert set(contracts.REQUIRED_ROLES) == set(contracts.ACCEPTED_FREQUENCIES)
+
+    expected_version = _parse_frontmatter_version(DOCS_ROOT / "CALCULATION_ENGINE_GUIDELINES.md")
+    assert _parse_frontmatter_version(DOCS_ROOT / "COUNTRY_INFLATION_METHODS.md") == expected_version
+    assert _parse_frontmatter_version(DOCS_ROOT / "GLOBAL_INFLATION_METHODS.md") == expected_version
+
+    for indicator_id, version in {**country_versions, **global_versions}.items():
+        assert version == expected_version, f"{indicator_id} version mismatch in methodology_versions.yaml"
+
+    for scope_dir in ("country", "global_"):
+        for path in sorted((ENGINE_ROOT / scope_dir).glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            text = path.read_text(encoding="utf-8")
+            match = re.search(r'^METHODOLOGY_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+            assert match is not None, f"{path.name} missing METHODOLOGY_VERSION"
+            assert match.group(1) == expected_version, f"{path.name} METHODOLOGY_VERSION != {expected_version}"

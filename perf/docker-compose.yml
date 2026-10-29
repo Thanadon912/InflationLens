@@ -30,7 +30,7 @@ services:
       # perf/scripts/run.sh) or live graphs go gappy mid-run.
       - --query.lookback-delta=15s
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -46,7 +46,7 @@ services:
     # 3000 is already the front end's static server (Front-end/, and
     # Flask's default CORS origin list), so the dashboard lives on 3001.
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       # A QA tester opening a load-test dashboard should not first have to
       # be given an account. Nothing here is writable and nothing leaves

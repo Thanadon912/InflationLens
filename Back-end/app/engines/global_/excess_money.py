@@ -14,14 +14,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from app.engines.shared.aggregation import weighted_arithmetic_mean
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.engines.shared.errors import MissingRequiredInputError, UnsupportedMethodError
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "global_excess_money_growth"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 SUPPORTED_METHODS = ("aggregate_first", "country_first")
 
 
@@ -68,7 +68,9 @@ def calculate(
             )
         common = set(country_money_growth) & set(country_real_gdp_growth) & set(country_weights)
         country_emg = {c: country_money_growth[c] - country_real_gdp_growth[c] for c in common}
-        renormalized_weights = {c: country_weights[c] for c in common}
+        renormalized_weights = align_weights_to_values(
+            country_emg, country_weights, context=f"{INDICATOR_ID}.country_weights"
+        )
         value = weighted_arithmetic_mean(country_emg, renormalized_weights)
         included_geographies = common
 
@@ -80,10 +82,29 @@ def calculate(
         )
 
     components = []
+    if method == "aggregate_first" and country_money_growth and country_real_gdp_growth and country_weights:
+        common = set(country_money_growth) & set(country_real_gdp_growth) & set(country_weights)
+        if common:
+            country_emg = {c: country_money_growth[c] - country_real_gdp_growth[c] for c in common}
+            renormalized_weights = align_weights_to_values(
+                country_emg, country_weights, context=f"{INDICATOR_ID}.country_weights"
+            )
+            components.append(
+                Component(
+                    key="country_first_excess_money_growth",
+                    label="Country-First Global Excess Money Growth",
+                    value=weighted_arithmetic_mean(country_emg, renormalized_weights),
+                    unit=Unit.PERCENT_YOY,
+                )
+            )
+            included_geographies = common
+
     if country_velocity_adjusted_mp and country_weights:
         common_mp = set(country_velocity_adjusted_mp) & set(country_weights)
-        gmp_weights = {c: country_weights[c] for c in common_mp}
         gmp_values = {c: country_velocity_adjusted_mp[c] for c in common_mp}
+        gmp_weights = align_weights_to_values(
+            gmp_values, country_weights, context=f"{INDICATOR_ID}.country_velocity_adjusted_mp"
+        )
         gmp = weighted_arithmetic_mean(gmp_values, gmp_weights)
         components.append(
             Component(

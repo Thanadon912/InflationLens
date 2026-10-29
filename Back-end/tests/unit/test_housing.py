@@ -82,6 +82,19 @@ class TestMortgagePayment:
         with pytest.raises(DataQualityError):
             housing.MortgageAssumptions(term_years=30, loan_to_value=0.8, payment_frequency="weekly").periods_per_year()
 
+    @pytest.mark.parametrize("bad_rate", [-0.01, 1.5, 6.5])
+    def test_out_of_bounds_mortgage_rate_ratio_raises(self, bad_rate):
+        assumptions = housing.MortgageAssumptions(term_years=30, loan_to_value=0.8, payment_frequency="monthly")
+        with pytest.raises(DataQualityError):
+            housing.calculate(
+                rent_index_current=100.0, rent_index_prior_year=100.0,
+                house_price_index_current=100.0, house_price_index_prior_year=100.0,
+                geography="USA", period="2026-06", calculated_at=CALCULATED_AT,
+                property_price_current=420000.0, property_price_prior_year=400000.0,
+                mortgage_rate_current=bad_rate, mortgage_rate_prior_year=0.06,
+                mortgage_assumptions=assumptions,
+            )
+
 
 class TestHousingBurden:
     def test_matches_manual_formula(self):

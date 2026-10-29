@@ -20,13 +20,13 @@ from app.engines.shared.aggregation import (
     unweighted_median,
     weighted_median,
 )
-from app.engines.shared.coverage import build_coverage_report
+from app.engines.shared.coverage import align_weights_to_values, build_coverage_report
 from app.models.enums import Confidence, Coverage, Unit
 from app.models.indicator_result import Component, IndicatorResult
 from app.models.methodology import InputProvenance
 
 INDICATOR_ID = "median_country_inflation"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 
 
 def calculate(
@@ -56,11 +56,14 @@ def calculate(
     ]
 
     if country_weights:
+        aligned_weights = align_weights_to_values(
+            country_rates, country_weights, context=f"{INDICATOR_ID}.country_weights"
+        )
         components.append(
             Component(
                 key="weighted_median",
                 label="Weighted Median",
-                value=weighted_median(country_rates, country_weights),
+                value=weighted_median(country_rates, aligned_weights),
                 unit=Unit.PERCENT_YOY,
             )
         )

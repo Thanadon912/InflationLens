@@ -1,8 +1,8 @@
 ---
 title: Country Inflation Methodology
 document_id: country-inflation-methodology
-version: 1.0.0
-status: draft
+version: 1.0.2
+status: approved
 language: en
 scope: country
 indicator_count: 10
@@ -247,7 +247,7 @@ Use the official national CPI, HICP, or equivalent all-items consumer price inde
 
 ## 4.4 Secondary views
 
-Month-over-month:
+Month-over-month (or period-over-period for quarterly/annual series):
 
 \[
 \pi^{headline,MoM}_t
@@ -257,7 +257,7 @@ Month-over-month:
 \right)\times100
 \]
 
-Three-month annualized momentum:
+Three-month annualized momentum (monthly series):
 
 \[
 \pi^{headline,3mAnn}_t
@@ -266,6 +266,18 @@ Three-month annualized momentum:
 \left(
 \frac{CPI_t}{CPI_{t-3}}
 \right)^4-1
+\right]\times100
+\]
+
+Six-month annualized momentum (monthly series):
+
+\[
+\pi^{headline,6mAnn}_t
+=
+\left[
+\left(
+\frac{CPI_t}{CPI_{t-6}}
+\right)^2-1
 \right]\times100
 \]
 
@@ -554,6 +566,31 @@ Inflation rate:
 \right)\times100
 \]
 
+Item-level expenditure weight in the reference period \(0\):
+
+\[
+w_{i,0}
+=
+\frac{
+p_{i,0}q_{i,0}
+}{
+\sum_{j=1}^{n}p_{j,0}q_{j,0}
+}
+\]
+
+Item-level additive contribution to the cumulative index change since the reference period (\(FLI_t - 100\)):
+
+\[
+Contribution_{i,t}
+=
+w_{i,0}
+\left(
+\frac{p_{i,t}}{p_{i,0}}-1
+\right)\times100,
+\qquad
+\sum_{i=1}^{n}Contribution_{i,t} = FLI_t - 100
+\]
+
 ## 7.4 Required inputs
 
 - reference-period quantities;
@@ -576,12 +613,12 @@ Each replacement must receive a quality-confidence flag.
 
 ## 7.6 Shrinkflation adjustment
 
-Use unit price:
+Let \(s_{i,t}\) and \(s_{i,0}\) denote the package size (weight, volume, or count per package) of item \(i\) in period \(t\) and base period \(0\). Use unit price:
 
 \[
 u_{i,t}
 =
-\frac{Price_{i,t}}{Quantity_{i,t}}
+\frac{p_{i,t}}{s_{i,t}}
 \]
 
 Then compare equivalent units:
@@ -592,6 +629,29 @@ Then compare equivalent units:
 \left(
 \frac{u_{i,t}}{u_{i,0}}-1
 \right)\times100
+\]
+
+To reflect package shrinkage at the basket level, define the effective constant-size price:
+
+\[
+p^{eff}_{i,t}
+=
+p_{i,t}\cdot\frac{s_{i,0}}{s_{i,t}}
+=
+u_{i,t}\cdot s_{i,0}
+\]
+
+and the shrinkflation-adjusted Fixed-Lifestyle Index:
+
+\[
+FLI^{shrink}_t
+=
+\frac{
+\sum_{i=1}^{n}p^{eff}_{i,t}q_{i,0}
+}{
+\sum_{i=1}^{n}p_{i,0}q_{i,0}
+}
+\times100
 \]
 
 ## 7.7 Quality adjustment
@@ -670,9 +730,11 @@ r_t(1+r_t)^N
 
 where:
 
-- \(L_t\) is the representative loan amount;
-- \(r_t\) is the periodic mortgage rate;
-- \(N\) is the number of payment periods.
+- \(L_t = \text{LTV} \cdot PropertyPrice_t\) is the representative loan amount;
+- \(R^{annual}_t \in [0, 1]\) is the nominal annual mortgage interest rate expressed as a decimal ratio (`unit = "ratio"`, e.g. `0.065` for \(6.5\%\) per annum; values outside \([0, 1]\) must be rejected as unit/data-quality errors);
+- \(m \in \{12, 4, 1\}\) is the number of payment periods per year (monthly, quarterly, annual);
+- \(r_t = R^{annual}_t / m\) is the periodic mortgage rate (with the continuous limit \(PMT_t = L_t / N\) at \(r_t = 0\));
+- \(N = \text{term\_years} \times m\) is the total number of payment periods.
 
 Mortgage-payment inflation:
 
@@ -784,7 +846,7 @@ MoneyOutputRatio_t
 \frac{M_t}{RealGDP_t}
 \]
 
-Growth:
+Approximate linear growth difference:
 
 \[
 g_t(M/RealGDP)
@@ -792,7 +854,7 @@ g_t(M/RealGDP)
 g_t(M)-g_t(RealGDP)
 \]
 
-approximately.
+If either current or prior-year auxiliary series (\(Population\) or \(RealGDP\)) is missing while the other is supplied, the engine must mark that optional subcomponent unavailable and emit an explicit warning rather than failing the headline broad-money calculation.
 
 ## 9.6 Interpretation
 
@@ -905,11 +967,14 @@ Display:
 - velocity change;
 - velocity-adjusted monetary pressure.
 
-## 10.6 Interpretation
+## 10.6 Interpretation and accounting identity note
 
-A positive Excess Money Growth value indicates that money is increasing faster than real output.
+A positive Excess Money Growth value (\(EMG_t = g_t(M) - g_t(Y)\)) indicates that money is increasing faster than real output under a constant-velocity baseline (\(\Delta V = 0\), analogous to P-star monetary overhang models).
 
-It is a pressure indicator, not a guaranteed CPI forecast.
+When velocity is computed residually from contemporaneous nominal GDP (\(V_t = NominalGDP_t / M_t\)), the exact discrete identity \(M_t V_t / Y_t = NominalGDP_t / RealGDP_t = GDPDeflator_t\) implies that \(MP_t = g_t(M) + g_t(V) - g_t(Y)\) is the first-order linear accounting decomposition of the GDP deflator inflation rate rather than an independent forecast of consumer inflation. Therefore:
+
+- \(EMG_t = g_t(M) - g_t(Y)\) is the primary headline measure of excess monetary expansion;
+- \(MP_t = g_t(M) + g_t(V) - g_t(Y)\) is reported as a secondary accounting component showing how contemporaneous velocity offset or amplified money growth.
 
 ## 10.7 Frequency rule
 

@@ -97,7 +97,7 @@ def test_full_provider_pipeline_calculates_eight_cached_views(synced_store):
         for indicator in ("headline_consumer_inflation", "essential_cost_inflation", "broad_money_expansion", "economy_wide_inflation"):
             snapshot = store.get_result(geography, indicator)
             assert snapshot is not None, (geography, indicator)
-            assert snapshot["result"]["methodology_version"] == "1.0.1"
+            assert snapshot["result"]["methodology_version"] == "1.0.2"
             if indicator == "essential_cost_inflation":
                 assert snapshot["period"] == "2026-04"
     assert any(issue["code"] == "CROSS_SOURCE_DIFFERENCE" for issue in result["issues"])

@@ -9,14 +9,17 @@ name: Security
 # the SAST layer is bandit and the secret scan is the gitleaks OSS
 # container, neither of which depends on the plan the repo is on.
 on:
-  push:
-    branches: [master]
   pull_request:
+  workflow_dispatch:
   schedule:
     # Monday 05:00 UTC, an hour before the live-provider smoke. Advisories
     # are published against dependencies that have not changed, so this has
     # to run on a clock and not only when someone touches the code.
     - cron: "0 5 * * 1"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python-deps:
@@ -58,10 +61,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      # `--audit-level=high` on purpose: the only dependency here is the
-      # Playwright test runner, which never ships to a user. A moderate
-      # advisory in a devDependency is worth knowing about, not worth
-      # blocking a merge on.
+      # `--audit-level=high` on purpose: audits all frontend dependencies
+      # (React, d3-geo, topojson-client, Vite, TypeScript, and Playwright).
       - run: npm audit --audit-level=high
 
   secrets:
@@ -90,12 +91,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # `-ll` gates on medium and above. The four B608 hits in
-      # app/data/store.py are reviewed and marked `# nosec B608` at the
-      # line, with the reason above it -- every one interpolates only
-      # string literals into SQL and binds every caller value through
-      # `params`. Keeping the gate at medium rather than high is what
-      # makes a *new* medium finding fail this job.
+      # `-ll` gates on medium and above. Every SQL query in app/data/store.py
+      # is a static string literal with `?` parameter bindings (zero `# nosec`
+      # suppressions needed). Keeping the gate at medium rather than high is
+      # what makes a *new* medium finding fail this job.
       - name: Install and scan
         run: |
           python -m venv .venv

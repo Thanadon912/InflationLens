@@ -80,15 +80,20 @@ OPTIONAL_ROLES: dict[str, set[str]] = {
 }
 
 WEIGHT_ROLES = {role for role in MAPPING_ROLES if "weight" in role}
-RATE_ROLES = {
-    role for roles in REQUIRED_ROLES.values() for role in roles
-    if "rate" in role or "growth" in role or "inflation_percent" in role
-} | {
-    "country_rates_prior", "country_velocity_adjusted_mp", "energy_inflation_percent",
-    "commodity_inflation_percent", "foreign_price_growth_percent",
-    "exchange_rate_growth_percent", "disposable_income_growth_percent",
-    "global_money_expansion_percent", "official_core_value",
-}
+RATE_ROLES = (
+    {
+        role
+        for roles in (*REQUIRED_ROLES.values(), *OPTIONAL_ROLES.values())
+        for role in roles
+        if "rate" in role or "growth" in role or "inflation_percent" in role
+    }
+    | {
+        "country_rates_prior", "country_velocity_adjusted_mp", "energy_inflation_percent",
+        "commodity_inflation_percent", "foreign_price_growth_percent",
+        "exchange_rate_growth_percent", "disposable_income_growth_percent",
+        "global_money_expansion_percent", "official_core_value",
+    }
+) - {"mortgage_rate_current", "mortgage_rate_prior_year"}
 INDEX_ROLES = {role for roles in REQUIRED_ROLES.values() for role in roles if "index" in role or "ppi_" in role}
 
 OPTION_KEYS: dict[str, set[str]] = {
@@ -143,16 +148,39 @@ class NormalizedPayload:
     adjusted_weights: Mapping[str, float] | None = None
 
 
-PRIMARY_WEIGHT_PAIR = {
-    "global_consumer_inflation": ("country_weights", "country_headline_rates"),
-    "median_country_inflation": ("country_weights", "country_rates"),
-    "global_essential_inflation": ("consumption_ppp_weights", "country_essential_rates"),
-    "global_monetary_expansion": ("gdp_ppp_weights", "country_money_growth_rates"),
-    "global_excess_money_growth": ("country_weights", "country_money_growth"),
-    "global_producer_pressure": ("gdp_ppp_weights", "country_ppi_rates"),
-    "global_housing_asset_inflation": ("housing_weights", "country_house_price_current"),
-    "global_inflation_synchronization": ("population_weights", "country_rates_current"),
+WEIGHT_VALUE_PAIRS: dict[str, tuple[tuple[str, str], ...]] = {
+    "global_consumer_inflation": (
+        ("country_weights", "country_headline_rates"),
+    ),
+    "median_country_inflation": (
+        ("country_weights", "country_rates"),
+    ),
+    "global_essential_inflation": (
+        ("consumption_ppp_weights", "country_essential_rates"),
+        ("population_weights", "country_essential_rates"),
+    ),
+    "global_monetary_expansion": (
+        ("gdp_ppp_weights", "country_money_growth_rates"),
+        ("consumption_ppp_weights", "country_money_growth_rates"),
+    ),
+    "global_excess_money_growth": (
+        ("country_weights", "country_money_growth"),
+    ),
+    "global_producer_pressure": (
+        ("gdp_ppp_weights", "country_ppi_rates"),
+        ("import_share_weights", "country_import_rates"),
+        ("commodity_weights", "commodity_rates"),
+    ),
+    "global_housing_asset_inflation": (
+        ("housing_weights", "country_house_price_current"),
+        ("consumption_ppp_weights", "country_rent_rates"),
+    ),
+    "global_inflation_synchronization": (
+        ("population_weights", "country_rates_current"),
+    ),
 }
+
+PRIMARY_WEIGHT_PAIR = {k: pairs[0] for k, pairs in WEIGHT_VALUE_PAIRS.items()}
 
 
 def normalize_request(
@@ -167,6 +195,8 @@ def normalize_request(
     period = body.get("period")
     if not isinstance(period, str) or not period:
         raise SchemaError("Field 'period' must be a non-empty string", field="period")
+    if len(period) < 4 or not period[:4].isdigit():
+        raise SchemaError("Field 'period' must start with a 4-digit year", field="period", received=period)
     inputs = body.get("inputs")
     if not isinstance(inputs, Mapping):
         raise SchemaError("Field 'inputs' must be an object of normalized-observation arrays", field="inputs")
@@ -206,22 +236,24 @@ def normalize_request(
         else:
             raise SchemaError("Scalar input role must contain exactly one observation", role=role)
 
-    pair = PRIMARY_WEIGHT_PAIR.get(indicator_id)
-    if pair and pair[0] in legacy and pair[1] in legacy:
-        weight_role, value_role = pair
-        original_weights = dict(legacy[weight_role])
-        validate_weights(original_weights, context=f"{indicator_id}.{weight_role}")
-        available = set(legacy[value_role])
-        missing_weight = sum(value for key, value in original_weights.items() if key not in available)
-        if structurally_dominant_weight is None:
-            raise SchemaError("Global missing-weight policy is not configured")
-        if missing_weight >= structurally_dominant_weight:
-            raise CoverageThresholdError(
-                f"{indicator_id}: missing geographies are structurally dominant",
-                missing_weight=missing_weight,
-            )
-        adjusted_weights = renormalize_weights(original_weights, available)
-        legacy[weight_role] = adjusted_weights
+    for idx, (weight_role, value_role) in enumerate(WEIGHT_VALUE_PAIRS.get(indicator_id, ())):
+        if weight_role in legacy and value_role in legacy:
+            role_original_weights = dict(legacy[weight_role])
+            validate_weights(role_original_weights, context=f"{indicator_id}.{weight_role}")
+            available = set(legacy[value_role])
+            missing_weight = sum(value for key, value in role_original_weights.items() if key not in available)
+            if structurally_dominant_weight is None:
+                raise SchemaError("Global missing-weight policy is not configured")
+            if missing_weight >= structurally_dominant_weight:
+                raise CoverageThresholdError(
+                    f"{indicator_id}: missing geographies are structurally dominant",
+                    missing_weight=missing_weight,
+                )
+            role_adjusted_weights = renormalize_weights(role_original_weights, available)
+            legacy[weight_role] = role_adjusted_weights
+            if idx == 0 or original_weights is None:
+                original_weights = role_original_weights
+                adjusted_weights = role_adjusted_weights
 
     if global_scope:
         universe = body.get("universe")
@@ -292,6 +324,8 @@ def _validate_role(indicator_id: str, role: str, observations: list[Observation]
     if role in WEIGHT_ROLES or role in COVERAGE_MEASURE_ROLES:
         if frequencies != {Frequency.ANNUAL}:
             raise FrequencyMismatchError(expected="annual lagged measure", received=", ".join(sorted(f.value for f in frequencies)), indicator=role)
+        if len(target_period) < 4 or not target_period[:4].isdigit():
+            raise SchemaError("Field 'period' must start with a 4-digit year", field="period", received=target_period)
         expected_period = str(int(target_period[:4]) - 1)
         if periods != {expected_period}:
             raise PeriodAlignmentError("Global weights and coverage measures must use the previous annual period", role=role, expected=expected_period, received=sorted(periods))

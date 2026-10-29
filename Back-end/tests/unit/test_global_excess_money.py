@@ -86,20 +86,19 @@ class TestInvalidWeights:
                 country_weights={"USA": 1.2, "EA": -0.2},
             )
 
-    def test_partial_coverage_across_country_first_inputs_raises(self):
-        # Regression-documenting: country_weights covering a country absent
-        # from country_money_growth/country_real_gdp_growth is not
-        # renormalized over the intersection today, so the surviving
-        # weights (which no longer sum to 1) are rejected outright rather
-        # than silently averaged over a smaller set.
-        with pytest.raises(InvalidWeightError):
-            gem.calculate(
-                method="country_first",
-                all_geographies=("USA", "EA", "JPN"), period="p", calculated_at=CALCULATED_AT,
-                country_money_growth={"USA": 7.0, "EA": 5.0},
-                country_real_gdp_growth={"USA": 2.0, "EA": 1.0},
-                country_weights={"USA": 0.5, "EA": 0.3, "JPN": 0.2},
-            )
+    def test_partial_coverage_across_country_first_inputs_renormalizes_and_marks_partial(self):
+        result = gem.calculate(
+            method="country_first",
+            all_geographies=("USA", "EA", "JPN"), period="p", calculated_at=CALCULATED_AT,
+            country_money_growth={"USA": 7.0, "EA": 5.0},
+            country_real_gdp_growth={"USA": 2.0, "EA": 1.0},
+            country_weights={"USA": 0.5, "EA": 0.3, "JPN": 0.2},
+        )
+        # Renormalized weights over USA (0.5/0.8 = 0.625) and EA (0.3/0.8 = 0.375)
+        expected = 0.625 * (7.0 - 2.0) + 0.375 * (5.0 - 1.0)
+        assert result.value == pytest.approx(expected)
+        assert result.coverage.value == "partial"
+        assert result.coverage_report.missing_geographies == ("JPN",)
 
     def test_velocity_adjusted_component_with_bad_weights_raises(self):
         with pytest.raises(InvalidWeightError):

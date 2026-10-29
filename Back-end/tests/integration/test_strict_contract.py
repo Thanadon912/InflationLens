@@ -55,7 +55,7 @@ class TestStrictCountryContract:
         assert response.status_code == 200
         data = response.get_json()
         assert data["value"] == pytest.approx(10.0)
-        assert data["methodology_version"] == "1.0.1"
+        assert data["methodology_version"] == "1.0.2"
         assert data["config_version"] == "1.1.0"
         assert data["input_series"][0]["source_url"] == "https://example.test/official"
         assert data["input_series"][0]["data_vintage"] == "2026-08-01"
@@ -209,7 +209,7 @@ class TestStrictGlobalContract:
             response = raw_client.post("/api/v1/global/global_consumer_inflation", json=self.payload())
         assert response.status_code == 200
         event = next(record.message for record in caplog.records if '"event": "indicator_calculated"' in record.message)
-        assert '"methodology_version": "1.0.1"' in event
+        assert '"methodology_version": "1.0.2"' in event
         assert '"config_version": "global-weights-1.1.0"' in event
         assert '"inputs"' not in event
 

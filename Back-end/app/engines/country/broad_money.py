@@ -11,7 +11,6 @@ consumer-price inflation rate -- COUNTRY guidelines section 9.8: "Use
 """
 
 from __future__ import annotations
-import copy
 
 from app.engines.shared.growth import year_over_year
 from app.engines.shared.errors import DataQualityError
@@ -22,7 +21,7 @@ from app.models.methodology import InputProvenance
 from app.models.observation import Observation
 
 INDICATOR_ID = "broad_money_expansion"
-METHODOLOGY_VERSION = "1.0.1"
+METHODOLOGY_VERSION = "1.0.2"
 LABEL = "Broad Money Expansion"
 
 def _compute_real_gdp_growth_n_rdio_current(
@@ -32,7 +31,7 @@ def _compute_real_gdp_growth_n_rdio_current(
         money_growth: float
 ) -> tuple[list[Component] | None, str | None]:
     components: list[Component] = []
-    if real_gdp_current is None and real_gdp_prior_year is None:
+    if real_gdp_current is None or real_gdp_prior_year is None:
         return None, f"{INDICATOR_ID}: money_to_real_output_ratio unavailable (missing real GDP data)"
     if real_gdp_current <= 0 or real_gdp_prior_year <= 0:
         raise DataQualityError("Real GDP levels must be positive for money/output calculations")
@@ -63,7 +62,7 @@ def _compute_per_capita_growth(
         money_current: float,
         money_prior_year: float
 ) -> tuple[Component | None, str | None]:
-    if population_current is None and population_prior_year is None:
+    if population_current is None or population_prior_year is None:
         return None, f"{INDICATOR_ID}: per_capita_growth unavailable (missing population data)"
     if population_current <= 0 or population_prior_year <= 0:
         raise DataQualityError("Population levels must be positive for per-capita money growth")

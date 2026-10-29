@@ -75,6 +75,9 @@ class TestShrinkflation:
         unit_price = next(c for c in result.components if c.key == "unit_price_rice")
         # same price, smaller package -> unit price increased
         assert unit_price.value > 0
+        raw_index = next(c for c in result.components if c.key == "fixed_basket_index")
+        shrink_index = next(c for c in result.components if c.key == "fli_shrinkflation_adjusted")
+        assert shrink_index.value > raw_index.value
 
     def test_no_shrinkflation_when_package_unchanged(self):
         result = fl.calculate(
