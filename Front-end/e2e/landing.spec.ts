@@ -41,14 +41,27 @@ test.describe("landing page", () => {
     expect(text.toLowerCase()).not.toMatch(/api_key|apikey|token=/);
   });
 
-  test("world and US choropleths draw real map geometry", async ({ page }) => {
+  test("capabilities showcase renders tabs and live diagnostic instruments", async ({ page }) => {
     await page.goto("/index.html");
     await expect(page.locator("body")).toHaveAttribute("data-maps", "ready", { timeout: 15_000 });
-    await expect(page.locator("#w-lines path").first()).toBeAttached();
-    await expect(page.locator("#u-lines path").first()).toBeAttached();
-    // At least one US state must actually be colored from live data
-    // (L.us.stateValues), not just outlined.
-    await expect(page.locator("#u-fill path").first()).toBeAttached();
+    // Check all 4 capability tabs exist
+    await expect(page.locator("#tab-spread")).toBeVisible();
+    await expect(page.locator("#tab-categories")).toBeVisible();
+    await expect(page.locator("#tab-regions")).toBeVisible();
+    await expect(page.locator("#tab-simulator")).toBeVisible();
+
+    // Check measure spread tab is active by default and has all 7 official measures
+    const mRows = page.locator("#m-rows .m-row");
+    await expect(mRows).toHaveCount(7);
+
+    // Switch to Category tab
+    await page.click("#tab-categories");
+    const catCards = page.locator("#cat-bars .cat-card");
+    await expect(catCards).toHaveCount(6);
+
+    // Switch to Simulator tab
+    await page.click("#tab-simulator");
+    await expect(page.locator(".gauge-val")).toBeVisible();
   });
 
   test("hero search hands off to the workbench with the typed query", async ({ page }) => {

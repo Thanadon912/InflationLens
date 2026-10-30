@@ -58,17 +58,27 @@ def seed(db_path: Path) -> None:
     fred_raw = bundle_for("fred")
     world_bank_raw = bundle_for("world_bank")
 
-    # cpi + core: two clean, computable YoY periods each -- enough for the
-    # measure grid, the spread axis, and the 1m/6m window rail to all show
-    # a real number instead of the frontend's "—" placeholder.
-    cpi = _mapping_for(registry, geography="USA", indicator_id="headline_consumer_inflation", role="all_items_cpi_index", measure_id="cpi", region_id=None)
-    core = _mapping_for(registry, geography="USA", indicator_id="headline_consumer_inflation", role="all_items_cpi_index", measure_id="core", region_id=None)
-    for m, base, raw in ((cpi, 320.0, bls_raw), (core, 300.0, bls_raw)):
+    # Seven official measures: clean, computable YoY periods for all 7 gauges
+    # (CPI-U: 3.6%, Core CPI: 3.2%, C-CPI-U: 3.3%, PPI: 2.8%, PCE: 3.1%, Core PCE: 3.0%, Trimmed: 3.2%)
+    measure_rates = [
+        ("cpi", 3.6, bls_raw),
+        ("core", 3.2, bls_raw),
+        ("ccpi", 3.3, bls_raw),
+        ("ppi", 2.8, bls_raw),
+        ("pce", 3.1, fred_raw),
+        ("cpce", 3.0, fred_raw),
+    ]
+    for measure_id, rate, raw in measure_rates:
+        m = _mapping_for(registry, geography="USA", indicator_id="headline_consumer_inflation", role="all_items_cpi_index", measure_id=measure_id, region_id=None)
+        base = 100.0
         store.save_point(run, raw, SourcePoint(m, "2025-06", base))
-        store.save_point(run, raw, SourcePoint(m, "2025-07", base + 1))
-        store.save_point(run, raw, SourcePoint(m, "2026-01", round(base * 1.015, 4)))  # 6mo back from 2026-07
-        store.save_point(run, raw, SourcePoint(m, "2026-06", round(base * 1.03, 4)))
-        store.save_point(run, raw, SourcePoint(m, "2026-07", round(base * 1.034, 4)))
+        store.save_point(run, raw, SourcePoint(m, "2025-07", base))
+        store.save_point(run, raw, SourcePoint(m, "2026-01", round(base * (1 + rate * 0.3 / 100), 4)))  # 6mo back from 2026-07, distinct momentum for 6m window
+        store.save_point(run, raw, SourcePoint(m, "2026-06", round(base * (1 + rate * 0.9 / 100), 4)))
+        store.save_point(run, raw, SourcePoint(m, "2026-07", round(base * (1 + rate / 100), 4)))
+
+    m_trim = _mapping_for(registry, geography="USA", indicator_id="headline_consumer_inflation", role="all_items_cpi_index", measure_id="trim", region_id=None)
+    store.save_point(run, fred_raw, SourcePoint(m_trim, "2026-07", 3.2))
 
     region_rates = {"Northeast": 3.2, "Midwest": 3.1, "South": 3.6, "West": 3.5}
     for region, rate in region_rates.items():

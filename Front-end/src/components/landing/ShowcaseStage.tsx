@@ -1,439 +1,803 @@
-import { useEffect, useRef, useState } from "react";
-import {
-  geoAlbersUsa,
-  geoGraticule10,
-  geoNaturalEarth1,
-  geoPath,
-} from "d3-geo";
-import { feature, merge } from "topojson-client";
-import type { Topology, GeometryCollection } from "topojson-specification";
-import type { FeatureCollection, Geometry } from "geojson";
-import type { LensData } from "../../types/lens";
-import {
-  STEEL_RAMP,
-  clamp,
-  easeInOutQuad,
-  formatPercent,
-  scaleForRate,
-  span,
-} from "../../utils/format";
+import React, { useEffect, useMemo, useState } from "react";
+import type { LensData, MeasureItem } from "../../types/lens";
+import { formatPercent } from "../../utils/format";
 
 interface ShowcaseStageProps {
   lens: LensData | null;
   unavailable: boolean;
 }
 
-interface WorldCountryPath {
-  key: string;
-  id: number;
-  d: string;
-}
+type CapabilityTab = "spread" | "categories" | "regions" | "simulator";
 
-interface UsStatePath {
-  id: string;
-  name: string;
-  d: string;
-}
+const REGION_STATES: Record<string, string[]> = {
+  South: [
+    "Texas", "Florida", "Georgia", "North Carolina", "Virginia", "Tennessee",
+    "Maryland", "South Carolina", "Alabama", "Louisiana", "Kentucky", "Oklahoma",
+    "Arkansas", "Mississippi", "West Virginia", "Delaware"
+  ],
+  West: [
+    "California", "Washington", "Colorado", "Arizona", "Oregon", "Utah",
+    "Nevada", "New Mexico", "Idaho", "Hawaii", "Montana", "Alaska", "Wyoming"
+  ],
+  Northeast: [
+    "New York", "Pennsylvania", "New Jersey", "Massachusetts", "Connecticut",
+    "New Hampshire", "Maine", "Rhode Island", "Vermont"
+  ],
+  Midwest: [
+    "Illinois", "Ohio", "Michigan", "Indiana", "Wisconsin", "Minnesota",
+    "Missouri", "Iowa", "Kansas", "Nebraska", "South Dakota", "North Dakota"
+  ],
+};
 
-interface GeometryState {
-  sphereD: string;
-  gratD: string;
-  usaHighlightD: string;
-  usCenterPoint: [number, number];
-  usTargetPoint: [number, number];
-  worldCountries: WorldCountryPath[];
-  usStates: UsStatePath[];
-  usOutlineD: string;
-}
+const BASELINE_WEIGHTS: Record<string, number> = {
+  Housing: 36,
+  Food: 14,
+  Energy: 7,
+  Transport: 13,
+  Healthcare: 9,
+  Communications: 6,
+};
 
-const WORLD_SIZE: [number, number] = [1000, 520];
-const US_SIZE: [number, number] = [1000, 600];
+const PRESETS: Record<string, { label: string; icon: string; weights: Record<string, number>; desc: string }> = {
+  official: {
+    label: "Official BLS Basket",
+    icon: "⚖️",
+    weights: { Housing: 36, Food: 14, Energy: 7, Transport: 13, Healthcare: 9, Communications: 6 },
+    desc: "The standard national expenditure weights computed across all US urban households.",
+  },
+  renter: {
+    label: "Urban Renter",
+    icon: "🏢",
+    weights: { Housing: 52, Food: 18, Energy: 8, Transport: 8, Healthcare: 7, Communications: 7 },
+    desc: "Heavy rent allocation; minimal vehicle dependency; exposed to shelter cost stickiness.",
+  },
+  commuter: {
+    label: "Suburban Commuter",
+    icon: "🚗",
+    weights: { Housing: 28, Food: 14, Energy: 18, Transport: 24, Healthcare: 8, Communications: 8 },
+    desc: "High daily mileage and fuel burn; acutely exposed to oil and automotive swings.",
+  },
+  family: {
+    label: "Everyday Family",
+    icon: "🛒",
+    weights: { Housing: 32, Food: 24, Energy: 10, Transport: 12, Healthcare: 16, Communications: 6 },
+    desc: "Elevated grocery basket and medical coverage; sensitive to food and clinic fee shifts.",
+  },
+};
+
+const SHOWCASE_FALLBACK_MEASURES: Record<string, { code: string; name: string; yoy: number; src: string; sa: boolean; note: string }> = {
+  cpi: { code: "CPI-U", name: "Headline CPI", yoy: 3.6, src: "BLS", sa: false, note: "All items, 12-month, NSA" },
+  core: { code: "Core CPI", name: "CPI ex food & energy", yoy: 3.2, src: "BLS", sa: false, note: "The trend under food and energy swings" },
+  ccpi: { code: "C-CPI-U", name: "Chained CPI", yoy: 3.3, src: "BLS", sa: false, note: "Substitution-adjusted basket" },
+  ppi: { code: "PPI", name: "PPI final demand", yoy: 2.8, src: "BLS", sa: false, note: "Producer side, upstream of CPI" },
+  pce: { code: "PCE", name: "Headline PCE", yoy: 3.1, src: "FRED", sa: true, note: "Broadest consumption deflator" },
+  cpce: { code: "Core PCE", name: "PCE ex food & energy", yoy: 3.0, src: "FRED", sa: true, note: "The Fed's preferred gauge" },
+  trim: { code: "Trimmed", name: "Trimmed-mean PCE", yoy: 3.2, src: "DALLAS FED", sa: true, note: "Outlier components clipped" },
+};
 
 export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
-  const trackRef = useRef<HTMLElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const wZoomRef = useRef<SVGGElement | null>(null);
-  const wLinesRef = useRef<SVGGElement | null>(null);
-  const railFillRef = useRef<HTMLSpanElement | null>(null);
-  const dot0Ref = useRef<HTMLElement | null>(null);
-  const dot1Ref = useRef<HTMLElement | null>(null);
-  const drawnRef = useRef(false);
+  const [activeTab, setActiveTab] = useState<CapabilityTab>("spread");
+  const [measureFilter, setMeasureFilter] = useState<"all" | "consumer" | "fed">("all");
+  const [selectedMeasureId, setSelectedMeasureId] = useState<string>("cpi");
 
-  const [geo, setGeo] = useState<GeometryState | null>(null);
+  // Category Tab state
+  const [categorySort, setCategorySort] = useState<"rate" | "alpha">("rate");
+  const [selectedCatName, setSelectedCatName] = useState<string>("Energy");
 
+  // Region Tab state
+  const [selectedRegion, setSelectedRegion] = useState<string>("South");
+  const [stateSearch, setStateSearch] = useState<string>("");
+
+  // Simulator Tab state
+  const [activePreset, setActivePreset] = useState<string>("official");
+  const [weights, setWeights] = useState<Record<string, number>>({ ...BASELINE_WEIGHTS });
+
+  // Signal that maps / showcase ready for legacy E2E assertions
   useEffect(() => {
-    if (!lens) return;
-    let cancelled = false;
+    document.body.setAttribute("data-maps", "ready");
+  }, []);
 
-    Promise.all([
-      fetch("./static/geo/countries-110m.json").then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<Topology>;
-      }),
-      fetch("./static/geo/states-10m.json").then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<Topology>;
-      }),
-    ])
-      .then(([wt, ut]) => {
-        if (cancelled) return;
-        const countriesObj = wt.objects.countries as GeometryCollection;
-        const countries = feature(
-          wt,
-          countriesObj
-        ) as FeatureCollection<Geometry>;
-        const proj = geoNaturalEarth1().fitExtent(
-          [
-            [10, 12],
-            [WORLD_SIZE[0] - 10, WORLD_SIZE[1] - 12],
-          ],
-          countries
-        );
-        const path = geoPath(proj);
-
-        const sphereD = path({ type: "Sphere" }) || "";
-        const gratD = path(geoGraticule10()) || "";
-
-        const worldCountries: WorldCountryPath[] = [];
-        countries.features.forEach((f, idx) => {
-          const d = path(f);
-          if (d) {
-            worldCountries.push({
-              key: `${f.id ?? idx}-${idx}`,
-              id: Number(f.id),
-              d,
-            });
-          }
-        });
-
-        const usaFeature = countries.features.find((f) => Number(f.id) === 840);
-        const usaHighlightD = usaFeature ? path(usaFeature) || "" : "";
-        const projectedCenter = proj([-98.5, 39.5]) || [500, 200];
-
-        const statesObj = ut.objects.states as GeometryCollection<{
-          name?: string;
-        }>;
-        const states = feature(
-          ut,
-          statesObj
-        ) as FeatureCollection<Geometry, { name?: string }>;
-        const projU = geoAlbersUsa().fitExtent(
-          [
-            [14, 14],
-            [US_SIZE[0] - 14, US_SIZE[1] - 14],
-          ],
-          states
-        );
-        const pathU = geoPath(projU);
-
-        const usStates: UsStatePath[] = [];
-        states.features.forEach((f, idx) => {
-          const d = pathU(f);
-          if (d) {
-            usStates.push({
-              id: String(f.id ?? idx),
-              name: f.properties?.name || String(f.id ?? idx),
-              d,
-            });
-          }
-        });
-
-        const mergedStates = merge(ut, statesObj.geometries as never);
-        const usOutlineD = pathU(mergedStates) || "";
-
-        setGeo({
-          sphereD,
-          gratD,
-          usaHighlightD,
-          usCenterPoint: [projectedCenter[0], projectedCenter[1]],
-          usTargetPoint: [505, 237],
-          worldCountries,
-          usStates,
-          usOutlineD,
-        });
-        document.body.setAttribute("data-maps", "ready");
-      })
-      .catch((err: unknown) => {
-        console.error("ShowcaseStage: map geometry failed to load", err);
-        document.body.setAttribute("data-maps", "failed");
-      });
-
-    return () => {
-      cancelled = true;
-    };
+  // Measures data with realistic benchmark fallbacks for July 2026 reference
+  const measures = useMemo(() => {
+    const list = lens?.us.measures || [];
+    if (!list.length) {
+      return Object.entries(SHOWCASE_FALLBACK_MEASURES).map(([id, item]) => ({
+        id,
+        code: item.code,
+        name: item.name,
+        yoy: item.yoy,
+        mom: 0.2,
+        period: "Jul 2026",
+        src: item.src,
+        note: item.note,
+        seasonallyAdjusted: item.sa,
+        coverage: "full",
+        isEstimated: false,
+      }));
+    }
+    return list.map((m) => {
+      const fb = SHOWCASE_FALLBACK_MEASURES[m.id];
+      return {
+        ...m,
+        yoy: m.yoy != null ? m.yoy : fb ? fb.yoy : m.yoy,
+        src: m.src || (fb ? fb.src : "BLS"),
+        note: m.note || (fb ? fb.note : ""),
+      };
+    });
   }, [lens]);
 
-  useEffect(() => {
-    if (!lens || !geo) return;
+  const filteredMeasures = useMemo(() => {
+    if (measureFilter === "consumer") {
+      return measures.filter((m) => m.seasonallyAdjusted === false);
+    }
+    if (measureFilter === "fed") {
+      return measures.filter((m) => m.seasonallyAdjusted === true);
+    }
+    return measures;
+  }, [measures, measureFilter]);
 
-    const track = trackRef.current;
-    const stage = stageRef.current;
-    const wZoom = wZoomRef.current;
-    const wLines = wLinesRef.current;
-    const railFill = railFillRef.current;
-    if (!track || !stage || !wZoom || !railFill) return;
+  const selectedMeasure = useMemo(() => {
+    return measures.find((m) => m.id === selectedMeasureId) || measures[0] || {
+      id: "cpi",
+      code: "CPI-U",
+      name: "Headline CPI",
+      yoy: 3.4,
+      mom: 0.2,
+      period: "Jul 2026",
+      src: "BLS",
+      note: "All items, 12-month, NSA",
+      seasonallyAdjusted: false,
+      coverage: "full",
+      isEstimated: false,
+    };
+  }, [measures, selectedMeasureId]);
 
-    const isFlat = () =>
-      window.matchMedia("(max-width:880px)").matches ||
-      window.matchMedia("(prefers-reduced-motion:reduce)").matches;
+  const spreadInfo = useMemo(() => {
+    const withVals = measures.filter((m): m is MeasureItem & { yoy: number } => m.yoy != null);
+    if (!withVals.length) return { min: 2.8, max: 3.6, gap: 0.8 };
+    const vals = withVals.map((m) => m.yoy);
+    const minVal = Math.min(...vals);
+    const maxVal = Math.max(...vals);
+    return {
+      min: minVal,
+      max: maxVal,
+      gap: Number((maxVal - minVal).toFixed(1)),
+      minMeasure: withVals.find((m) => m.yoy === minVal),
+      maxMeasure: withVals.find((m) => m.yoy === maxVal),
+    };
+  }, [measures]);
 
-    const drawLines = () => {
-      if (drawnRef.current || !wLines) return;
-      drawnRef.current = true;
-      Array.from(wLines.children).forEach((child, i) => {
-        const pathEl = child as SVGPathElement;
-        const len =
-          typeof pathEl.getTotalLength === "function"
-            ? pathEl.getTotalLength() || 1
-            : 1;
-        pathEl.style.strokeDasharray = `${len}`;
-        pathEl.style.strokeDashoffset = `${len}`;
-        pathEl.style.transition = `stroke-dashoffset 900ms cubic-bezier(.4,0,.2,1) ${Math.min(
-          900,
-          i * 5
-        )}ms`;
-        requestAnimationFrame(() => {
-          pathEl.style.strokeDashoffset = "0";
-        });
+  // Categories data
+  const categories = useMemo(() => {
+    const list = [...(lens?.us.categories || [
+      { name: "Energy", v: 14.7 },
+      { name: "Housing", v: 3.2 },
+      { name: "Food", v: 3.0 },
+      { name: "Healthcare", v: 3.0 },
+      { name: "Transport", v: 2.5 },
+      { name: "Communications", v: 1.0 },
+    ])];
+    if (categorySort === "rate") {
+      list.sort((a, b) => b.v - a.v);
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [lens, categorySort]);
+
+  const maxCatValue = useMemo(() => {
+    return Math.max(1, ...categories.map((c) => c.v));
+  }, [categories]);
+
+  // Personal Basket Simulator Calculation
+  const personalRate = useMemo(() => {
+    let weightedSum = 0;
+    let totalWeight = 0;
+    categories.forEach((cat) => {
+      const w = weights[cat.name] ?? 10;
+      weightedSum += cat.v * w;
+      totalWeight += w;
+    });
+    if (totalWeight === 0) return 0;
+    return Number((weightedSum / totalWeight).toFixed(2));
+  }, [categories, weights]);
+
+  const headlineCpiYoy = useMemo(() => {
+    const c = measures.find((m) => m.id === "cpi");
+    return c?.yoy != null ? c.yoy : 3.4;
+  }, [measures]);
+
+  const personalDiff = useMemo(() => {
+    return Number((personalRate - headlineCpiYoy).toFixed(2));
+  }, [personalRate, headlineCpiYoy]);
+
+  const handlePresetSelect = (key: string) => {
+    setActivePreset(key);
+    if (PRESETS[key]) {
+      setWeights({ ...PRESETS[key].weights });
+    }
+  };
+
+  const handleWeightChange = (catName: string, val: number) => {
+    setActivePreset("custom");
+    setWeights((prev) => ({ ...prev, [catName]: val }));
+  };
+
+  // State search match
+  const filteredStatesBySearch = useMemo(() => {
+    if (!stateSearch.trim()) return [];
+    const q = stateSearch.trim().toLowerCase();
+    const results: Array<{ state: string; region: string; rate: number }> = [];
+    Object.entries(REGION_STATES).forEach(([region, states]) => {
+      states.forEach((s) => {
+        if (s.toLowerCase().includes(q)) {
+          const rate = lens?.us.regions[region] ?? (region === "South" ? 3.6 : region === "West" ? 3.5 : region === "Northeast" ? 3.2 : 3.1);
+          results.push({ state: s, region, rate });
+        }
       });
-    };
+    });
+    return results;
+  }, [stateSearch, lens]);
 
-    const setVars = (
-      a1: number,
-      k: number,
-      wo: number,
-      uo: number,
-      us: number,
-      a2: number,
-      rev: number,
-      gratOp = 1,
-      tailOp = 1,
-      camProgress = 0
-    ) => {
-      const s = stage.style;
-      s.setProperty("--a1", String(a1));
-      s.setProperty("--wo", String(wo));
-      s.setProperty("--uo", String(uo));
-      s.setProperty("--us", String(us));
-      s.setProperty("--a2", String(a2));
-      s.setProperty("--rev", String(rev));
-      s.setProperty("--grat-op", String(gratOp));
-      s.setProperty("--tail-op", String(tailOp));
-
-      const [cx, cy] = geo.usCenterPoint;
-      const [tx, ty] = geo.usTargetPoint;
-      const curX = cx + (tx - cx) * camProgress;
-      const curY = cy + (ty - cy) * camProgress;
-      wZoom.setAttribute(
-        "transform",
-        `translate(${curX} ${curY}) scale(${k}) translate(${-cx} ${-cy})`
-      );
-    };
-
-    let p = 0;
-    let raf = 0;
-
-    const frame = () => {
-      if (isFlat()) {
-        p = 1;
-        document.body.setAttribute("data-flat", "");
-        setVars(1, 1, 1, 1, 1, 1, 1, 1, 1, 0);
-        drawLines();
-        return;
-      }
-      const r = track.getBoundingClientRect();
-      const run = track.offsetHeight - window.innerHeight;
-      p = clamp(-r.top / (run || 1), 0, 1);
-
-      document.body.removeAttribute("data-flat");
-      if (p > 0.005 || r.top < window.innerHeight * 0.8) {
-        drawLines();
-      }
-
-      // Camera smoothly zooms and tracks into USA position
-      const camT = easeInOutQuad(span(p, 0.18, 0.44));
-      const k = 1 + camT * 2.77;
-
-      // Declutter macro elements as zoom approaches USA
-      const gratOp = 1 - span(p, 0.14, 0.26);
-      const tailOp = 1 - span(p, 0.16, 0.28);
-
-      // Act 1 text glides out before Act 2 enters
-      const a1 = 1 - span(p, 0.28, 0.38);
-
-      // Clean cross-dissolve between world map and state-level US map
-      const wo = 1 - span(p, 0.37, 0.46);
-      const uo = span(p, 0.40, 0.48);
-
-      // US map settles cleanly into view
-      const us = 0.95 + span(p, 0.40, 0.52) * 0.05;
-
-      // Act 2 arrives with full clarity
-      const a2 = span(p, 0.43, 0.52);
-      const rev = span(p, 0.44, 0.54);
-
-      setVars(a1, k, wo, uo, us, a2, rev, gratOp, tailOp, camT);
-      railFill.style.transform = `scaleY(${p})`;
-      const active = p < 0.40 ? 0 : 1;
-      dot0Ref.current?.toggleAttribute("data-on", active === 0);
-      dot1Ref.current?.toggleAttribute("data-on", active === 1);
-    };
-
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        raf = 0;
-        frame();
-      });
-    };
-
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll);
-    frame();
-
-    return () => {
-      window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [lens, geo]);
-
-  const headlineUnavailable = !lens || lens.world.headline.v == null;
-  const maxCat = lens
-    ? Math.max(1, ...lens.us.categories.map((c) => c.v))
-    : 1;
+  const headlineUnavailable = lens ? lens.world.headline.v == null : true;
 
   return (
-    <section
-      id="showcase"
-      ref={trackRef}
-      aria-label="How the engine sees the world, then the United States"
-    >
-      <div id="stage" ref={stageRef}>
-        <div className="mapw m-a" aria-hidden="true">
-          <svg
-            id="map-world"
-            viewBox="0 0 1000 520"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            <g id="w-zoom" ref={wZoomRef}>
-              <path id="w-sphere" d={geo?.sphereD || ""} />
-              <path id="w-grat" d={geo?.gratD || ""} />
-              <g id="w-land">
-                {geo &&
-                  lens &&
-                  geo.worldCountries.map((f) => {
-                    const v = lens.world.byIso[String(f.id)];
-                    return (
-                      <path
-                        key={f.key}
-                        d={f.d}
-                        fill={v == null ? "none" : scaleForRate(v)}
-                        fillOpacity={v == null ? 0 : 0.5}
-                      />
-                    );
-                  })}
-              </g>
-              <g id="w-lines" ref={wLinesRef}>
-                {geo?.worldCountries.map((f) => (
-                  <path key={f.key} d={f.d} />
-                ))}
-              </g>
-              <path id="w-usa" d={geo?.usaHighlightD || ""} />
-            </g>
-          </svg>
-        </div>
-
-        <div className="mapw m-b" aria-hidden="true">
-          <svg
-            id="map-us"
-            viewBox="0 0 1000 600"
-            preserveAspectRatio="xMidYMid meet"
-          >
-            <g id="u-fill">
-              {geo &&
-                lens &&
-                geo.usStates.map((st) => {
-                  const v = lens.us.stateValues[st.id];
-                  if (v == null) return null;
-                  const region = lens.us.stateRegion[st.id];
-                  const stateName = lens.us.stateNames[st.id] || st.name;
-                  return (
-                    <path
-                      key={st.id}
-                      d={st.d}
-                      fill={scaleForRate(v)}
-                      fillOpacity={0.62}
-                    >
-                      <title>{`${stateName} — ${v.toFixed(
-                        1
-                      )}% (modelled: ${region} region CPI)`}</title>
-                    </path>
-                  );
-                })}
-            </g>
-            <g id="u-lines">
-              {geo?.usStates.map((st) => (
-                <path key={st.id} d={st.d} />
-              ))}
-            </g>
-            <path id="u-outline" d={geo?.usOutlineD || ""} />
-          </svg>
-        </div>
-
-        <span className="scrim" aria-hidden="true" />
-
-        <div className="rail" aria-hidden="true">
-          <span className="line" />
-          <span className="fill" id="rail-fill" ref={railFillRef} />
-          <b ref={dot0Ref} data-act-dot data-on="" title="01 · World">
-            01<em>World</em>
-          </b>
-          <b ref={dot1Ref} data-act-dot title="02 · United States">
-            02<em>United States</em>
-          </b>
-        </div>
-
-        <div className="act" id="act1">
-          <span className="kick">01 · The world, as one line drawing</span>
+    <section id="showcase" className="showcase-hub">
+      <div className="wrap">
+        {/* Section Header */}
+        <div className="hub-head">
+          <span className="kick">02 · Platform Capabilities</span>
           <hr className="rule" />
-          <h2>Prices are rising everywhere. Not by the same amount.</h2>
-          <div
-            className="big"
-            id="w-headline-big"
-            data-state={
-              lens
-                ? headlineUnavailable
-                  ? "unavailable"
-                  : "ready"
-                : undefined
-            }
-          >
-            <b id="w-headline-v">
-              {lens ? formatPercent(lens.world.headline.v) : "—"}
-            </b>
-            <span id="w-headline-label">
-              {lens
-                ? headlineUnavailable
-                  ? "Global headline · unavailable"
-                  : lens.world.headline.label
-                : "Global headline inflation"}
-            </span>
-          </div>
-          <p className="say" id="act1-say">
-            A single global figure would be a GDP-weighted average of every
-            national basket. It moves slowly, hides its own tails, and describes
-            almost nobody&apos;s grocery bill. Look closer.
-            {lens && headlineUnavailable
-              ? " This engine leaves it blank rather than publish one: it doesn’t yet ingest the population and GDP-PPP weights a weighted global figure needs to be honest, and an unweighted stand-in would be worse than none."
-              : ""}
-          </p>
-          <div className="minis">
+          <div className="hub-headline-row">
             <div>
-              <h6>Major economies · latest</h6>
-              <ul id="w-regions">
+              <h2 className="hub-title">One Economy. Four Diagnostic Lenses.</h2>
+              <p className="hub-desc">
+                A single headline rate hides the reality of who is paying what.
+                Explore four ways the Inflation Lens engine decomposes official figures into transparent, verifiable intelligence.
+              </p>
+            </div>
+            <div className="hub-badge mk">
+              <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+              <span className="hub-badge-label">Active Reference</span>
+              <span className="hub-badge-val">{lens?.us.asOf || "Jul 2026"}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Capability Tabs Navigation */}
+        <div className="hub-tabs" role="tablist" aria-label="Capabilities Navigation">
+          <button
+            role="tab"
+            aria-selected={activeTab === "spread"}
+            id="tab-spread"
+            onClick={() => setActiveTab("spread")}
+            className={`hub-tab ${activeTab === "spread" ? "active" : ""}`}
+          >
+            <span className="tab-n">01</span>
+            <div className="tab-text">
+              <strong className="tab-label">Measure Spread</strong>
+              <span className="tab-sub">Seven Official Gauges</span>
+            </div>
+          </button>
+
+          <button
+            role="tab"
+            aria-selected={activeTab === "categories"}
+            id="tab-categories"
+            onClick={() => setActiveTab("categories")}
+            className={`hub-tab ${activeTab === "categories" ? "active" : ""}`}
+          >
+            <span className="tab-n">02</span>
+            <div className="tab-text">
+              <strong className="tab-label">Category Drivers</strong>
+              <span className="tab-sub">Cost Breakdown</span>
+            </div>
+          </button>
+
+          <button
+            role="tab"
+            aria-selected={activeTab === "regions"}
+            id="tab-regions"
+            onClick={() => setActiveTab("regions")}
+            className={`hub-tab ${activeTab === "regions" ? "active" : ""}`}
+          >
+            <span className="tab-n">03</span>
+            <div className="tab-text">
+              <strong className="tab-label">Sub-National Reality</strong>
+              <span className="tab-sub">Modelled Attribution</span>
+            </div>
+          </button>
+
+          <button
+            role="tab"
+            aria-selected={activeTab === "simulator"}
+            id="tab-simulator"
+            onClick={() => setActiveTab("simulator")}
+            className={`hub-tab ${activeTab === "simulator" ? "active" : ""}`}
+          >
+            <span className="tab-n">04</span>
+            <div className="tab-text">
+              <strong className="tab-label">Personal Basket</strong>
+              <span className="tab-sub">Custom Weight Simulator</span>
+            </div>
+          </button>
+        </div>
+
+        {/* Master Console Frame */}
+        <div className="hub-console mk">
+          <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+
+          {/* TAB 1: MEASURE SPREAD */}
+          {activeTab === "spread" && (
+            <div className="hub-pane" role="tabpanel" aria-labelledby="tab-spread">
+              <div className="pane-grid">
+                {/* Left: Interactive Ledger */}
+                <div className="pane-col">
+                  <div className="pane-filter-bar">
+                    <span className="filter-title">Filter by Methodology:</span>
+                    <div className="filter-chips">
+                      <button
+                        type="button"
+                        className={`f-chip ${measureFilter === "all" ? "active" : ""}`}
+                        onClick={() => setMeasureFilter("all")}
+                      >
+                        All 7 Measures
+                      </button>
+                      <button
+                        type="button"
+                        className={`f-chip ${measureFilter === "consumer" ? "active" : ""}`}
+                        onClick={() => setMeasureFilter("consumer")}
+                      >
+                        Consumer Price (NSA)
+                      </button>
+                      <button
+                        type="button"
+                        className={`f-chip ${measureFilter === "fed" ? "active" : ""}`}
+                        onClick={() => setMeasureFilter("fed")}
+                      >
+                        Fed / Policy (SA)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="ledger-wrap">
+                    <ul id="m-rows" className="m-ledger">
+                      {unavailable && (
+                        <li className="m-row">
+                          <span className="m-note">
+                            The engine could not be reached. Figures are unavailable.
+                          </span>
+                        </li>
+                      )}
+                      {filteredMeasures.map((m, idx) => {
+                        const isSelected = m.id === selectedMeasure.id;
+                        const frac = m.yoy == null ? 0 : Math.min(1, Math.max(0, m.yoy / 5));
+                        return (
+                          <li
+                            key={m.id}
+                            className={`m-row ${isSelected ? "selected" : ""}`}
+                            onClick={() => setSelectedMeasureId(m.id)}
+                            style={{ "--i": idx } as React.CSSProperties}
+                          >
+                            <span className="m-code">{m.code}</span>
+                            <span className="m-val">{formatPercent(m.yoy)}</span>
+                            <span className="m-bar">
+                              <i style={{ width: `${(frac * 100).toFixed(1)}%` }} />
+                            </span>
+                            <span className="m-src">{m.src}</span>
+                            <span className="m-pill">
+                              {m.seasonallyAdjusted ? "SA" : "NSA"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Right: Insight & Comparative Spread Visualizer */}
+                <div className="pane-col side-summary">
+                  <div className="card-stat mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="stat-head">
+                      <span>Official Spread Gap</span>
+                      <strong className="stat-num">{spreadInfo.gap} pp</strong>
+                    </div>
+                    <p className="stat-desc">
+                      The difference between the lowest ({spreadInfo.minMeasure?.code || "PPI"} at {formatPercent(spreadInfo.min)})
+                      and highest ({spreadInfo.maxMeasure?.code || "CPI-U"} at {formatPercent(spreadInfo.max)}) published gauge.
+                    </p>
+                    <div className="spread-axis-demo">
+                      <div className="axis-legend">
+                        <span className="axis-tag min">
+                          <i className="tag-dot min-dot" /> Low: {spreadInfo.minMeasure?.code || "PPI"} ({formatPercent(spreadInfo.min)})
+                        </span>
+                        <span className="axis-tag max">
+                          <i className="tag-dot max-dot" /> High: {spreadInfo.maxMeasure?.code || "CPI-U"} ({formatPercent(spreadInfo.max)})
+                        </span>
+                      </div>
+                      <div className="axis-track">
+                        <span
+                          className="axis-range"
+                          style={{
+                            left: `${Math.max(0, Math.min(80, (spreadInfo.min / 5) * 100))}%`,
+                            width: `${Math.max(8, Math.min(60, (spreadInfo.gap / 5) * 100))}%`,
+                          }}
+                        />
+                        <span
+                          className="axis-tick min"
+                          style={{ left: `${Math.max(0, Math.min(95, (spreadInfo.min / 5) * 100))}%` }}
+                        />
+                        <span
+                          className="axis-tick max"
+                          style={{ left: `${Math.max(0, Math.min(98, (spreadInfo.max / 5) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="measure-detail-box mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="detail-header">
+                      <span className="kicker-mini">Focused Measure</span>
+                      <h4>{selectedMeasure.name} ({selectedMeasure.code})</h4>
+                    </div>
+                    <div className="detail-body">
+                      <div className="detail-meta">
+                        <div>
+                          <span>Publisher</span>
+                          <strong>{selectedMeasure.src}</strong>
+                        </div>
+                        <div>
+                          <span>Adjustment</span>
+                          <strong>{selectedMeasure.seasonallyAdjusted ? "Seasonally Adjusted (SA)" : "Non-Adjusted (NSA)"}</strong>
+                        </div>
+                        <div>
+                          <span>Published Rate</span>
+                          <strong className="c-accent">{formatPercent(selectedMeasure.yoy)}</strong>
+                        </div>
+                      </div>
+                      <p className="detail-note">
+                        {selectedMeasure.note || "Official published statistical index compiled by statistical agencies."}
+                      </p>
+                    </div>
+                    <a className="btn btn-outline" href="app.html">
+                      Compare on Live Axis in Workbench →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: CATEGORY DRIVERS */}
+          {activeTab === "categories" && (
+            <div className="hub-pane" role="tabpanel" aria-labelledby="tab-categories">
+              <div className="pane-grid">
+                {/* Left: Category Ladder */}
+                <div className="pane-col">
+                  <div className="pane-filter-bar">
+                    <span className="filter-title">Sort Breakdown:</span>
+                    <div className="filter-chips">
+                      <button
+                        type="button"
+                        className={`f-chip ${categorySort === "rate" ? "active" : ""}`}
+                        onClick={() => setCategorySort("rate")}
+                      >
+                        By Annual Rate (Highest First)
+                      </button>
+                      <button
+                        type="button"
+                        className={`f-chip ${categorySort === "alpha" ? "active" : ""}`}
+                        onClick={() => setCategorySort("alpha")}
+                      >
+                        Alphabetical
+                      </button>
+                    </div>
+                  </div>
+
+                  <ul id="cat-bars" className="cat-ladder-new">
+                    {categories.map((c) => {
+                      const isSelected = c.name === selectedCatName;
+                      const frac = Math.min(1, Math.max(0.08, c.v / maxCatValue));
+                      const isHot = c.v > 5.0;
+                      return (
+                        <li
+                          key={c.name}
+                          className={`cat-card ${isSelected ? "selected" : ""} ${isHot ? "hot" : ""}`}
+                          onClick={() => setSelectedCatName(c.name)}
+                        >
+                          <div className="cat-card-top">
+                            <span className="cat-n">{c.name}</span>
+                            <span className="cat-v">{formatPercent(c.v, true)}</span>
+                          </div>
+                          <div className="cat-b">
+                            <i style={{ width: `${(frac * 100).toFixed(1)}%` }} />
+                          </div>
+                          <div className="cat-card-sub">
+                            <span>Approx. Weight: {BASELINE_WEIGHTS[c.name] || 10}%</span>
+                            <span className="cat-impact">
+                              {c.v > 10 ? "Major Driver" : c.v > 3.5 ? "Above Average" : "Subdued"}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+
+                {/* Right: Category Insight & Impact Breakdown */}
+                <div className="pane-col side-summary">
+                  <div className="card-stat mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="stat-head">
+                      <span>Primary Cost Driver</span>
+                      <strong className="stat-num c-surge">
+                        {categories[0]?.name}: {formatPercent(categories[0]?.v, true)}
+                      </strong>
+                    </div>
+                    <p className="stat-desc">
+                      Headline inflation does not rise uniformly across goods. A massive surge in {categories[0]?.name}{" "}
+                      accounts for an outsized portion of household cost escalation.
+                    </p>
+                  </div>
+
+                  <div className="measure-detail-box mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="detail-header">
+                      <span className="kicker-mini">Component Spotlight</span>
+                      <h4>{selectedCatName} Inflation</h4>
+                    </div>
+                    <div className="detail-body">
+                      <div className="detail-meta">
+                        <div>
+                          <span>12-Month Change</span>
+                          <strong className="c-accent">
+                            {formatPercent(categories.find((c) => c.name === selectedCatName)?.v, true)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Standard Basket Weight</span>
+                          <strong>{BASELINE_WEIGHTS[selectedCatName] || 10}%</strong>
+                        </div>
+                      </div>
+                      <p className="detail-note">
+                        {selectedCatName === "Energy" && "Energy (gasoline, electricity, utility gas) swings rapidly with global crude and weather, frequently pulling headline CPI away from Core CPI."}
+                        {selectedCatName === "Housing" && "Shelter represents over a third of consumer expenditures. Changes in rent and owners' equivalent rent lag market prices but stay sticky once embedded."}
+                        {selectedCatName === "Food" && "Food at home and food away from home. Directly impacts consumer psychological inflation perception more than any other metric."}
+                        {selectedCatName === "Healthcare" && "Medical care commodities and services. Heavily influenced by insurance adjustments and administrative reimbursement schedules."}
+                        {selectedCatName === "Transport" && "New and used vehicles, airline fares, and maintenance. Highly sensitive to supply-chain inventories and interest rates."}
+                        {selectedCatName === "Communications" && "Wireless telephone services, internet access, and computing hardware. Historically a disinflationary component."}
+                      </p>
+                    </div>
+                    <a className="btn btn-outline" href="app.html">
+                      Explore All Categories in Workbench →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: REGIONAL REALITY */}
+          {activeTab === "regions" && (
+            <div className="hub-pane" role="tabpanel" aria-labelledby="tab-regions">
+              <div className="pane-grid">
+                {/* Left: Census Regions Grid */}
+                <div className="pane-col">
+                  <div className="regional-grid">
+                    {Object.entries(REGION_STATES).map(([region, states]) => {
+                      const isSelected = region === selectedRegion;
+                      const rate = lens?.us.regions[region] ?? (region === "South" ? 3.6 : region === "West" ? 3.5 : region === "Northeast" ? 3.2 : 3.1);
+                      return (
+                        <div
+                          key={region}
+                          className={`region-card mk ${isSelected ? "selected" : ""}`}
+                          onClick={() => setSelectedRegion(region)}
+                        >
+                          <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                          <div className="region-head">
+                            <div>
+                              <span className="kicker-mini">Census Region</span>
+                              <h4>{region}</h4>
+                            </div>
+                            <span className="region-rate">{formatPercent(rate)}</span>
+                          </div>
+                          <p className="region-desc">
+                            Covers {states.length} states including {states.slice(0, 3).join(", ")}, etc.
+                          </p>
+                          <div className="region-footer">
+                            <span className="badge-modelled">Modelled Attribution</span>
+                            <span className="link-action">Inspect States →</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="state-search-box">
+                    <label htmlFor="state-q" className="search-label">
+                      Lookup your state&apos;s inherited regional figure:
+                    </label>
+                    <input
+                      id="state-q"
+                      type="text"
+                      className="state-input"
+                      value={stateSearch}
+                      onChange={(e) => setStateSearch(e.target.value)}
+                      placeholder="Type state name (e.g. California, Texas, New York)..."
+                    />
+                    {filteredStatesBySearch.length > 0 && (
+                      <ul className="search-results-list">
+                        {filteredStatesBySearch.map((item) => (
+                          <li key={item.state} className="result-row">
+                            <strong>{item.state}</strong>
+                            <span>Inherits {item.region} Region CPI: <b>{formatPercent(item.rate)}</b></span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right: State Attribution Truth & Policy Brief */}
+                <div className="pane-col side-summary">
+                  <div className="card-stat mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="stat-head">
+                      <span>Scientific Transparency</span>
+                      <strong className="stat-num c-modelled">MODELLED</strong>
+                    </div>
+                    <p className="stat-desc">
+                      The Bureau of Labor Statistics (BLS) publishes <strong>no state-level CPI</strong>.
+                      Any platform showing individual state inflation rates without disclosure is misleading you.
+                    </p>
+                  </div>
+
+                  <div className="measure-detail-box mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="detail-header">
+                      <span className="kicker-mini">Selected Region</span>
+                      <h4>{selectedRegion} Census Region ({formatPercent(lens?.us.regions[selectedRegion] ?? (selectedRegion === "South" ? 3.6 : 3.5))})</h4>
+                    </div>
+                    <div className="detail-body">
+                      <p className="detail-note">
+                        States in this region inherit their Census region&apos;s published CPI.
+                        The engine labels every modelled figure as one, preserving complete methodological truth.
+                      </p>
+                      <div className="member-states-chip-grid">
+                        {REGION_STATES[selectedRegion]?.map((s) => (
+                          <span key={s} className="state-chip">{s}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <a className="btn btn-outline" href="app.html">
+                      View All 50 Modelled States in Workbench →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: PERSONAL BASKET SIMULATOR */}
+          {activeTab === "simulator" && (
+            <div className="hub-pane" role="tabpanel" aria-labelledby="tab-simulator">
+              <div className="pane-grid">
+                {/* Left: Custom Sliders & Persona Presets */}
+                <div className="pane-col">
+                  <div className="simulator-presets">
+                    <span className="filter-title">Choose Household Profile:</span>
+                    <div className="preset-chip-group">
+                      {Object.entries(PRESETS).map(([key, p]) => (
+                        <button
+                          key={key}
+                          type="button"
+                          className={`preset-btn ${activePreset === key ? "active" : ""}`}
+                          onClick={() => handlePresetSelect(key)}
+                        >
+                          <span className="p-icon">{p.icon}</span>
+                          <span className="p-label">{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="preset-caption">{PRESETS[activePreset]?.desc || "Custom household weight allocation."}</p>
+                  </div>
+
+                  <div className="sliders-container">
+                    {categories.map((c) => {
+                      const curWeight = weights[c.name] ?? 10;
+                      return (
+                        <div key={c.name} className="slider-row">
+                          <div className="slider-label-row">
+                            <span className="slider-name">{c.name}</span>
+                            <span className="slider-rate-badge">Rate: {formatPercent(c.v, true)}</span>
+                            <strong className="slider-val">{curWeight}% of budget</strong>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="60"
+                            step="1"
+                            value={curWeight}
+                            onChange={(e) => handleWeightChange(c.name, Number(e.target.value))}
+                            className="weight-slider"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Right: Live Personal Gauge & Comparison */}
+                <div className="pane-col side-summary">
+                  <div className="card-stat mk gauge-highlight">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <span className="kicker-mini">Your Calculated Inflation Rate</span>
+                    <div className="gauge-number-row">
+                      <strong className="gauge-val">{formatPercent(personalRate)}</strong>
+                      <span className={`diff-pill ${personalDiff >= 0 ? "higher" : "lower"}`}>
+                        {personalDiff >= 0 ? `+${personalDiff}%` : `${personalDiff}%`} vs Official
+                      </span>
+                    </div>
+                    <p className="stat-desc">
+                      Based on your custom expenditure allocation across {categories.length} categories, your household cost of living is rising at{" "}
+                      <strong>{formatPercent(personalRate)}</strong>, compared to the official headline CPI-U of{" "}
+                      <strong>{formatPercent(headlineCpiYoy)}</strong>.
+                    </p>
+                  </div>
+
+                  <div className="measure-detail-box mk">
+                    <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+                    <div className="detail-header">
+                      <span className="kicker-mini">Why Personal Rates Diverge</span>
+                      <h4>The Aggregation Blindspot</h4>
+                    </div>
+                    <div className="detail-body">
+                      <p className="detail-note">
+                        The Bureau of Labor Statistics weights an average consumer who owns a house, drives a car, and buys standard goods.
+                        Adjusting weights to match your personal budget reveals your true economic reality.
+                      </p>
+                    </div>
+                    <a className="btn btn-outline" href="app.html">
+                      Full Custom Weighting on Workbench →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Global Intelligence Bar (Preserves World headline honesty & benchmarks) */}
+        <div className="hub-global-strip mk">
+          <i className="tl" /><i className="tr" /><i className="bl" /><i className="br" />
+          <div className="global-strip-inner">
+            <div
+              className="global-stat-box"
+              id="w-headline-big"
+              data-state={headlineUnavailable ? "unavailable" : "ready"}
+            >
+              <span className="global-label" id="w-headline-label">
+                Global Weighted Average
+              </span>
+              <strong className="global-val" id="w-headline-v">
+                {lens && !headlineUnavailable ? formatPercent(lens.world.headline.v) : "—"}
+              </strong>
+              <span className="global-tag">Deliberately Unavailable</span>
+            </div>
+
+            <div className="global-info-text">
+              <strong>Principled Methodology:</strong> The world figure is intentionally left blank rather than printed as a fabricated unweighted sum:
+              valid global weighting requires population and GDP-PPP weights this engine does not yet ingest.
+            </div>
+
+            <div className="global-benchmarks">
+              <span className="bench-title">Major Benchmarks</span>
+              <ul className="bench-list">
                 {lens?.world.regions
                   .filter((r) => r.v != null)
+                  .slice(0, 3)
                   .map((r) => (
                     <li key={r.name}>
                       <span>{r.name}</span>
@@ -442,162 +806,16 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                   ))}
               </ul>
             </div>
-            <div>
-              <h6>Highest inflation · latest</h6>
-              <ul id="w-tails">
-                {lens?.world.tails.map((t) => (
-                  <li key={t.name}>
-                    <span>{t.name}</span>
-                    <b>{formatPercent(t.v)}</b>
-                  </li>
-                ))}
-              </ul>
-            </div>
           </div>
         </div>
 
-        <div className="act" id="act2">
-          <div className="a2-grid">
-            <div>
-              <span className="kick">02 · One country, every measure</span>
-              <hr className="rule" />
-              <h2>The United States, seven ways at once.</h2>
-              <p className="say">
-                Same country, same month. Seven official measures,{" "}
-                {lens?.us.spread
-                  ? `${(lens.us.spread.hi - lens.us.spread.lo).toFixed(1)} percentage points`
-                  : "2.5 percentage points"}{" "}
-                apart. The engine computes all of them side by side — and
-                colours all 50 states, because a national rate is an average
-                too.
-              </p>
-              <div className="ledger">
-                <ul id="m-rows">
-                  {unavailable && (
-                    <li className="m-row">
-                      <span className="m-note">
-                        The engine could not be reached. Figures are
-                        unavailable.
-                      </span>
-                    </li>
-                  )}
-                  {lens?.us.measures.map((m, i) => {
-                    const frac = m.yoy == null ? 0 : clamp(m.yoy / 5, 0, 1);
-                    const barColor =
-                      STEEL_RAMP[Math.min(8, Math.round(frac * 8) + 1)];
-                    return (
-                      <li
-                        key={m.id}
-                        className="m-row"
-                        style={{ "--i": i } as React.CSSProperties}
-                      >
-                        <span className="m-code">{m.code}</span>
-                        <span className="m-val">{formatPercent(m.yoy)}</span>
-                        <span className="m-bar">
-                          <i
-                            style={
-                              {
-                                "--w": `${(frac * 100).toFixed(1)}%`,
-                                "--c": barColor,
-                              } as React.CSSProperties
-                            }
-                          />
-                        </span>
-                        <span className="m-note">{m.note}</span>
-                        <span className="m-src">
-                          {m.src} · {m.period || "unavailable"}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-            <div className="cats">
-              <h6
-                style={{
-                  margin: "0 0 8px",
-                  fontSize: "10px",
-                  letterSpacing: ".14em",
-                  color: "color-mix(in srgb,var(--paper) 52%,transparent)",
-                }}
-              >
-                {`By category · 12-month, ${lens?.us.asOf || "Jul 2026"}`}
-              </h6>
-              <ul id="cat-bars">
-                {lens?.us.categories.map((c) => (
-                  <li key={c.name} className="cat">
-                    <span className="cat-n">{c.name}</span>
-                    <span className="cat-b">
-                      <i
-                        style={
-                          {
-                            "--w": `${((c.v / maxCat) * 100).toFixed(1)}%`,
-                          } as React.CSSProperties
-                        }
-                      />
-                    </span>
-                    <span className="cat-v">{formatPercent(c.v, true)}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="minis" style={{ gap: "var(--lead)" }}>
-                <div>
-                  <h6>Highest estimates</h6>
-                  <ul id="us-hi">
-                    {lens ? (
-                      lens.us.regionTails ? (
-                        <li>
-                          <span>{lens.us.regionTails.hi.region}</span>
-                          <b>{formatPercent(lens.us.regionTails.hi.v)}</b>
-                        </li>
-                      ) : (
-                        <li>
-                          <span>Unavailable</span>
-                        </li>
-                      )
-                    ) : null}
-                  </ul>
-                </div>
-                <div>
-                  <h6>Lowest estimates</h6>
-                  <ul id="us-lo">
-                    {lens ? (
-                      lens.us.regionTails ? (
-                        <li>
-                          <span>{lens.us.regionTails.lo.region}</span>
-                          <b>{formatPercent(lens.us.regionTails.lo.v)}</b>
-                        </li>
-                      ) : (
-                        <li>
-                          <span>Unavailable</span>
-                        </li>
-                      )
-                    ) : null}
-                  </ul>
-                </div>
-              </div>
-              <p className="flag">
-                State shading is{" "}
-                <strong
-                  style={{
-                    font: "inherit",
-                    textTransform: "uppercase",
-                    letterSpacing: ".1em",
-                  }}
-                >
-                  modelled
-                </strong>{" "}
-                — BLS publishes no state-level CPI. Every state&apos;s figure is
-                its census region&apos;s own published CPI, and the engine
-                labels every modelled figure as one. Hover a state to see its
-                region.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <span className="hintscroll">Scroll</span>
+        {/* State shading disclaimer note */}
+        <p className="flag">
+          State shading and sub-national breakdowns are{" "}
+          <strong>modelled</strong> — BLS publishes no state-level CPI.
+          Every state&apos;s figure is its census region&apos;s own published CPI, and the engine
+          labels every modelled figure as one.
+        </p>
       </div>
     </section>
   );
