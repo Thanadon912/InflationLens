@@ -77,3 +77,10 @@ flushSync(() => {
     </StrictMode>
   );
 });
+
+// Dismiss preloader once React has rendered the workbench page
+const loader = document.getElementById("page-loader");
+if (loader) {
+  loader.classList.add("fade-out");
+  setTimeout(() => loader.remove(), 400);
+}

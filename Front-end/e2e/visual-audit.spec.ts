@@ -4,6 +4,33 @@ import * as path from "path";
 const ARTIFACT_DIR = "/home/thanadon/.gemini/antigravity-cli/brain/c0572d7f-e7e1-4c35-a17e-ebedec0e83d9";
 
 test.describe("visual audit - capabilities studio showcase", () => {
+  test("page preloader animation renders on initial load and dismisses cleanly", async ({ page }) => {
+    let resume: () => void = () => {};
+    const wait = new Promise<void>((r) => { resume = r; });
+    await page.route("**/api/v1/measures/USA*", async (route) => {
+      await wait;
+      await route.continue();
+    });
+
+    const nav = page.goto("/index.html", { waitUntil: "domcontentloaded" });
+    const loader = page.locator("#page-loader");
+    await expect(loader).toBeVisible();
+
+    // Capture screenshot of the preloader animation
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, "preloader_animation.png"),
+      fullPage: false,
+    });
+
+    // Release the API response
+    resume();
+    await nav;
+
+    // Once data arrives and React renders, loader fades out and is removed from DOM
+    await expect(loader).toHaveCount(0, { timeout: 10_000 });
+    await expect(page.locator("body")).toHaveAttribute("data-maps", "ready");
+  });
+
   test("inspect desktop showcase across all capability tabs at 1920x963", async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 963 });
     await page.goto("/index.html");
