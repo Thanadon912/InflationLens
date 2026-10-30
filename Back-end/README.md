@@ -17,9 +17,13 @@ single test file during development never fails on unrelated coverage. `live`
 tests (real, read-only calls to official provider APIs) are excluded by
 default (`addopts = -m "not live"`); run them explicitly with `-m live`.
 
-Run locally:
+Run locally (or via Docker):
 
 ```bash
+# Option A: Containerized via Docker
+docker compose up backend
+
+# Option B: Manual virtual environment
 .venv/bin/flask --app app run --port 5000
 ```
 

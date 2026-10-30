@@ -214,6 +214,19 @@ class TestWorldCrossSection:
 class TestResolve:
     def test_resolves_configured_entities_only(self, client):
         assert client.get("/api/v1/resolve?q=euro").get_json()["matches"][0]["id"] == "EA"
+        assert client.get("/api/v1/resolve?q=eu").get_json()["matches"][0]["id"] == "EA"
+        assert client.get("/api/v1/resolve?q=EU").get_json()["matches"][0]["id"] == "EA"
+        assert client.get("/api/v1/resolve?q=us").get_json()["matches"][0]["id"] == "USA"
+        assert client.get("/api/v1/resolve?q=US").get_json()["matches"][0]["id"] == "USA"
+        assert client.get("/api/v1/resolve?q=usa").get_json()["matches"][0]["id"] == "USA"
+        assert client.get("/api/v1/resolve?q=USA").get_json()["matches"][0]["id"] == "USA"
+        assert client.get("/api/v1/resolve?q=United+States+of+America").get_json()["matches"][0]["id"] == "USA"
+        assert client.get("/api/v1/resolve?q=European+Union").get_json()["matches"][0]["id"] == "EA"
+        assert client.get("/api/v1/resolve?q=thailand").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=Thailand").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=argentina").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=Argentina").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=cyprus").get_json()["matches"] == []
         assert client.get("/api/v1/resolve?q=texas").get_json()["matches"] == []
         assert client.get("/api/v1/resolve").get_json()["matches"] == []
 

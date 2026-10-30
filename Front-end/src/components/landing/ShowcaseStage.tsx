@@ -226,7 +226,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
       if (isFlat()) {
         p = 1;
         document.body.setAttribute("data-flat", "");
-        setVars(1, 0, 1, 1, 1, 1, 1);
+        setVars(1, 1, 1, 1, 1, 1, 1);
         drawLines();
         return;
       }
@@ -245,8 +245,8 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
         1 - span(p, 0.32, 0.47),
         span(p, 0.34, 0.5),
         0.8 + span(p, 0.28, 0.56) * 0.2,
-        span(p, 0.46, 0.56),
-        span(p, 0.56, 0.92)
+        span(p, 0.44, 0.54),
+        span(p, 0.44, 0.68)
       );
       railFill.style.transform = `scaleY(${p})`;
       const active = p < 0.42 ? 0 : 1;
@@ -361,10 +361,10 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
         <div className="rail" aria-hidden="true">
           <span className="line" />
           <span className="fill" id="rail-fill" ref={railFillRef} />
-          <b ref={dot0Ref} data-act-dot data-on="">
+          <b ref={dot0Ref} data-act-dot data-on="" title="01 · World">
             01<em>World</em>
           </b>
-          <b ref={dot1Ref} data-act-dot>
+          <b ref={dot1Ref} data-act-dot title="02 · United States">
             02<em>United States</em>
           </b>
         </div>
@@ -405,7 +405,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
           </p>
           <div className="minis">
             <div>
-              <h6>By region · Mar 2026</h6>
+              <h6>Major economies · latest</h6>
               <ul id="w-regions">
                 {lens?.world.regions
                   .filter((r) => r.v != null)
@@ -418,7 +418,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
               </ul>
             </div>
             <div>
-              <h6>The tails · 2026</h6>
+              <h6>Highest inflation · latest</h6>
               <ul id="w-tails">
                 {lens?.world.tails.map((t) => (
                   <li key={t.name}>
@@ -438,10 +438,13 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
               <hr className="rule" />
               <h2>The United States, seven ways at once.</h2>
               <p className="say">
-                Same country, same month. Seven official measures, 2.5
-                percentage points apart. The engine computes all of them side by
-                side — and colours all 50 states, because a national rate is an
-                average too.
+                Same country, same month. Seven official measures,{" "}
+                {lens?.us.spread
+                  ? `${(lens.us.spread.hi - lens.us.spread.lo).toFixed(1)} percentage points`
+                  : "2.5 percentage points"}{" "}
+                apart. The engine computes all of them side by side — and
+                colours all 50 states, because a national rate is an average
+                too.
               </p>
               <div className="ledger">
                 <ul id="m-rows">
@@ -504,13 +507,13 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
             <div className="cats">
               <h6
                 style={{
-                  margin: "0 0 var(--half)",
+                  margin: "0 0 8px",
                   fontSize: "10px",
                   letterSpacing: ".14em",
                   color: "color-mix(in srgb,var(--paper) 52%,transparent)",
                 }}
               >
-                By category · 12-month, Jul 2026
+                {`By category · 12-month, ${lens?.us.asOf || "Jul 2026"}`}
               </h6>
               <ul id="cat-bars">
                 {lens?.us.categories.map((c) => (

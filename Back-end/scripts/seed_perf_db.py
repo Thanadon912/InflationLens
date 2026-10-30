@@ -105,7 +105,7 @@ def _index_series(periods: list[str], base: float, annual_percent: float, *, per
 
     step_rate = (1 + annual_percent / 100) ** (1 / per_year)
     return {
-        period: round(base * step_rate**step * (1 + 0.004 * math.sin(step * 1.7)), 4)
+        period: round(base * step_rate**step * (1 + 0.004 * math.sin(step * 1.1)), 4)
         for step, period in enumerate(periods)
     }
 
@@ -258,13 +258,33 @@ def _seed_world(store, run, raw) -> None:
     guarantees the endpoint's loop runs over its full real width instead
     of discarding most rows as unmappable."""
 
+    named_overrides: dict[str, tuple[str, float]] = {
+        "ARG": ("Argentina", 117.8),
+        "TUR": ("Turkiye", 44.4),
+        "NGA": ("Nigeria", 32.7),
+        "EGY": ("Egypt", 26.5),
+        "USA": ("United States", 3.4),
+        "DEU": ("Germany", 2.3),
+        "FRA": ("France", 2.2),
+        "GBR": ("United Kingdom", 2.6),
+        "JPN": ("Japan", 2.8),
+        "CHN": ("China", 0.6),
+        "IND": ("India", 4.8),
+        "BRA": ("Brazil", 4.4),
+        "CAN": ("Canada", 2.5),
+        "AUS": ("Australia", 3.5),
+        "CHE": ("Switzerland", 1.1),
+    }
+
     mapping = {"provider": "world_bank", "series_id": "FP.CPI.TOTL.ZG", "indicator_id": "median_country_inflation", "role": "country_rates", "geography": "GLOBAL", "frequency": "annual", "unit": "percent_yoy"}
     for step, iso3 in enumerate(sorted(load_iso_numeric())):
-        # A spread from roughly -1% to 20% across ~220 economies, so the
-        # median, the tails and the choropleth's colour scale all have
-        # something real to work with.
-        value = round(-1.0 + (step % 43) * 0.5, 4)
-        store.save_point(run, raw["world_bank"], SourcePoint({**mapping, "component_id": iso3}, "2024", value, provider_status=iso3))
+        if iso3 in named_overrides:
+            display_name, value = named_overrides[iso3]
+        else:
+            display_name = iso3
+            # Realistic cross-section distribution centered around ~3.1%
+            value = round(0.4 + (step % 28) * 0.22, 4)
+        store.save_point(run, raw["world_bank"], SourcePoint({**mapping, "component_id": iso3}, "2024", value, provider_status=display_name))
 
 
 if __name__ == "__main__":

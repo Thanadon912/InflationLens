@@ -9,7 +9,7 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 | | |
 |---|---|
 | **Back-end/** | Flask API, calculation engines, official-data ingestion (FRED, BEA, BLS, Eurostat, ECB, World Bank), SQLite-cached reads, and in-memory HTTP rate limiting. See [Back-end/README.md](Back-end/README.md). |
-| **Front-end/** | React 19 + TypeScript + Vite landing page and interactive workbench (`d3-geo` + `topojson-client`). Playwright end-to-end tests exercise the production bundle against a real running backend. |
+| **Front-end/** | React 19 + TypeScript + Vite landing page and interactive workbench (`d3-geo` + `topojson-client`). Playwright end-to-end tests exercise the production bundle against a real running backend. See [Front-end/README.md](Front-end/README.md). |
 | **perf/** | k6 load tests against a gunicorn-served API, with a Grafana dashboard built for QA. See [perf/README.md](perf/README.md). |
 | **docs/** | Methodology references: calculation engine guidelines, country and global inflation methods, official data source guide. |
 
@@ -17,7 +17,7 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 
 - **Strict, versioned calculation contract.** The API accepts only normalized, provenance-tagged observations -- no anonymous numbers -- and rejects malformed or under-covered input rather than silently approximating it.
 - **Real official data, cached deterministically.** A CLI ingestion pipeline pulls from official providers, stores raw payloads and revisions with full lineage, and the web API only ever reads the cache -- so `GET` requests stay fast and deterministic even if a provider is slow or down.
-- **Heavily tested.** 700+ backend tests (unit, property-based, integration, contract) at 97%+ branch coverage, plus a Playwright end-to-end suite that drives the real front end against a real Flask instance.
+- **Heavily tested.** 745+ backend tests (unit, property-based, integration, contract) at 97%+ branch coverage, plus 26 Playwright end-to-end tests that drive the production front end bundle against a live Flask process.
 - **Measured, not assumed.** A k6 suite (smoke/load/stress/spike/abuse) drives the API on gunicorn against a production-sized seeded cache, with SLOs enforced by exit code and results in a purpose-built Grafana dashboard -- so "how fast" and "where it breaks" are answered numbers, not guesses. Measured: the read path saturates at **~700 req/s around 70 concurrent users** (4 gunicorn workers), and past that it queues rather than failing -- **0 errors in 303,343 requests** at 200 users. The ceiling scales with the worker pool, so it is a configuration limit, not a code one. Refusing a bad request costs about **a tenth** of serving a good one (p95 1.18 ms against 10.04 ms), so malformed traffic is not a cheaper way to exhaust it than ordinary traffic.
 - **Documented methodology.** Every formula, weight, and edge case (missing components, coverage thresholds, quality adjustments) is written down in `docs/` and traced to its tests in `Back-end/docs/FORMULA_TRACE.md`.
 
@@ -32,10 +32,25 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 **Not covered**
 - Model-based underlying inflation and the global common-factor model are explicitly out of scope for v1 (documented, not just missing).
 - No auth or multi-tenancy -- the API is open by design for read/calculation queries, protected by bounded in-memory per-IP rate limiting (`read` and `calc` buckets, configurable via environment variables) and strict HTTP security headers.
-- No production deployment setup: no HTTPS termination, no runtime monitoring or alerting. `perf/` does ship a containerized Prometheus/Grafana stack (bound to `127.0.0.1`) and a gunicorn config, but only for load testing -- the app itself is still not packaged for deployment. SQLite is used as the cache store; the load tests in `perf/` exercise the read path only (they saturate on gunicorn's worker pool, not on the database), so this store is still unproven under the concurrent **write** load a production ingestion schedule would put on it.
+- No enterprise clustering or runtime alerting setup. The full stack is containerized with multi-stage Docker images and Docker Compose for local evaluation or self-hosted deployment. SQLite is used as the deterministic cache store; load tests exercise the read path (saturating on gunicorn worker pools, not the database), while concurrent multi-worker write pipelines in high-throughput enterprise ingestion remain outside v1 scope.
 - CI runs on every pull request: the backend suite behind its coverage gate (`.github/workflows/backend-ci.yml`), the Playwright E2E suite against a real Flask process (`.github/workflows/e2e-ci.yml`), and dependency/secret/SAST scanning (`.github/workflows/security.yml`). Merging to `main` triggers CD directly without repeating CI (`.github/workflows/cd.yml`), deploying and promoting the Git-connected Vercel projects (`inflation-lens-api-thanadon912` and `inflation-lens-thanadon912`) via `scripts/vercel/manage.py`. The live-provider and load-test jobs run on a schedule instead, each for a reason documented in its workflow.
 
 ## Running it locally
+
+### With Docker Compose (Recommended)
+
+Run the entire full-stack application (Flask/Gunicorn API with auto-seeded cache + Nginx-served React front end with reverse proxy) in a single command:
+
+```bash
+docker compose up --build
+```
+
+- **Front end:** [http://localhost:3000](http://localhost:3000) (Workbench at [http://localhost:3000/app.html](http://localhost:3000/app.html))
+- **Back end API:** [http://localhost:5000/api/v1/health](http://localhost:5000/api/v1/health)
+
+*(If port 3000 is occupied by another process, override with `FRONTEND_PORT=3080 docker compose up`)*
+
+### Without Docker (Manual)
 
 ```bash
 # Back end

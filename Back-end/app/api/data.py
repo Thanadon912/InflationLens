@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import hashlib
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -61,9 +62,38 @@ _PUBLISHERS = {
 # resolving anything else would point the frontend at a dead end. See
 # README.md "Backend integration", integration point 5.
 _RESOLVABLE = (
-    {"kind": "country", "id": "USA", "label": "United States", "aliases": ("usa", "us", "united states", "america")},
-    {"kind": "country", "id": "EA", "label": "Euro area", "aliases": ("ea", "euro area", "eurozone", "europe", "euro")},
+    {
+        "kind": "country",
+        "id": "USA",
+        "label": "United States",
+        "aliases": ("usa", "us", "united states", "america", "u.s.", "u.s.a.", "united states of america"),
+        "pattern": re.compile(r"\b(usa|us|united states|america|u\.s\.|u\.s\.a\.|united states of america)\b", re.IGNORECASE),
+    },
+    {
+        "kind": "country",
+        "id": "EA",
+        "label": "Euro area",
+        "aliases": ("ea", "eu", "euro area", "eurozone", "europe", "euro", "e.u.", "european union"),
+        "pattern": re.compile(r"\b(ea|eu|euro area|eurozone|europe|euro|e\.u\.|european union)\b", re.IGNORECASE),
+    },
 )
+
+
+def _matches_entity(q: str, entity: dict) -> bool:
+    entity_id = entity["id"].lower()
+    if q == entity_id or entity_id.startswith(q):
+        return True
+    label = entity["label"].lower()
+    if q == label or q in label or label.startswith(q):
+        return True
+    for alias in entity["aliases"]:
+        if q == alias or alias.startswith(q):
+            return True
+        if len(alias) >= 3 and alias in q:
+            return True
+    if entity["pattern"].search(q):
+        return True
+    return False
 
 
 def _not_found(message: str):
@@ -422,6 +452,6 @@ def resolve():
     matches = []
     if q:
         for entity in _RESOLVABLE:
-            if q in entity["label"].lower() or any(q in alias for alias in entity["aliases"]):
+            if _matches_entity(q, entity):
                 matches.append({"kind": entity["kind"], "id": entity["id"], "label": entity["label"]})
     return jsonify({"query": q, "matches": matches})

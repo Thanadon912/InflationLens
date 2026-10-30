@@ -97,7 +97,44 @@ function assembleUs(
   };
 }
 
+const BENCHMARK_ECONOMIES: ReadonlyArray<{ iso: string; name: string }> = [
+  { iso: "840", name: "United States" },
+  { iso: "276", name: "Germany" },
+  { iso: "250", name: "France" },
+  { iso: "826", name: "United Kingdom" },
+  { iso: "392", name: "Japan" },
+  { iso: "156", name: "China" },
+];
+
+const ISO3_DISPLAY_NAMES: Record<string, string> = {
+  ARG: "Argentina",
+  TUR: "Turkiye",
+  NGA: "Nigeria",
+  EGY: "Egypt",
+  VEN: "Venezuela",
+  USA: "United States",
+  FRA: "France",
+  DEU: "Germany",
+  GBR: "United Kingdom",
+  JPN: "Japan",
+  CHN: "China",
+  IND: "India",
+  BRA: "Brazil",
+  VUT: "Vanuatu",
+  SAU: "Saudi Arabia",
+  MKD: "North Macedonia",
+  GUY: "Guyana",
+};
+
 function assembleWorld(worldRes: WorldCrossSectionApiResponse): WorldView {
+  const byIso = worldRes.byIso || {};
+  const regions = BENCHMARK_ECONOMIES.filter((b) => byIso[b.iso] != null)
+    .slice(0, 4)
+    .map((b) => ({
+      name: b.name,
+      v: byIso[b.iso] ?? null,
+    }));
+
   return {
     headline: {
       v: worldRes.headline,
@@ -113,9 +150,12 @@ function assembleWorld(worldRes: WorldCrossSectionApiResponse): WorldView {
     },
     g20: { v: worldRes.g20, label: "G20", src: null },
     economies: worldRes.economies,
-    regions: [],
-    tails: worldRes.tails.map((t) => ({ name: t.name, v: t.v })),
-    byIso: worldRes.byIso,
+    regions,
+    tails: worldRes.tails.map((t) => ({
+      name: ISO3_DISPLAY_NAMES[t.name] || t.name,
+      v: t.v,
+    })),
+    byIso,
   };
 }
 

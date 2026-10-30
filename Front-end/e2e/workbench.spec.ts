@@ -31,6 +31,7 @@ test.describe("workbench", () => {
 
   test("switching Adjustment re-fetches and narrows the measure set", async ({ page }) => {
     await page.goto("/app.html");
+    await expect(page.locator("#mgrid .mcard")).not.toHaveCount(0);
     const initialCount = await page.locator("#mgrid .mcard").count();
 
     await page.click('#adjustment-rail button[data-adjustment="sa"]');
@@ -54,9 +55,40 @@ test.describe("workbench", () => {
     await page.goto("/app.html");
     await expect(page.locator("#cats tr")).not.toHaveCount(0);
     await expect(page.locator("#states tr")).not.toHaveCount(0);
-    // Every region row discloses it's modelled (BLS publishes no
-    // state-level CPI) -- not a silently invented per-state number.
-    await expect(page.locator("#states tr").first().locator(".est")).toHaveText("modelled");
+    // The table discloses once, in its heading, that every row is modelled
+    // (BLS publishes no state-level CPI) -- not a silently invented
+    // per-state number, and not the same badge repeated on 51 rows.
+    await expect(page.locator("#states-block h2 .est")).toHaveText("modelled");
+    await expect(page.locator("#states tr .est")).toHaveCount(0);
+  });
+
+  test("a successful load shows no stale badge", async ({ page }) => {
+    await page.goto("/app.html");
+    await expect(page.locator("#head-name")).toHaveText("United States");
+    await expect(page.locator("#stale-tag")).toBeHidden();
+  });
+
+  test("the spread axis keeps every dot inside its frame on every window", async ({ page }) => {
+    await page.goto("/app.html");
+    for (const win of ["12m", "1m", "6m"]) {
+      await page.click(`#window-rail button[data-window="${win}"]`);
+      await expect(page.locator(`#window-rail button[data-window="${win}"]`)).toHaveAttribute("aria-pressed", "true");
+      const axis = await page.locator("#axis").boundingBox();
+      const dots = page.locator("#axis .dot i");
+      await expect(dots).not.toHaveCount(0);
+      for (const box of await dots.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()))) {
+        expect(box.left).toBeGreaterThanOrEqual(axis!.x - 1);
+        expect(box.right).toBeLessThanOrEqual(axis!.x + axis!.width + 1);
+      }
+    }
+    await expect(page.locator("#mgrid")).not.toContainText("-0.0");
+  });
+
+  test("the source rail lists only publishers covering the selected geography", async ({ page }) => {
+    await page.goto("/app.html");
+    await page.click('#geo-rail button[data-geo="EA"]');
+    await expect(page.locator("#head-name")).toHaveText("Euro area");
+    await expect(page.locator("#prov")).not.toContainText("BLS");
   });
 
   test("search resolves a typed geography and switches the workbench", async ({ page }) => {
@@ -69,6 +101,45 @@ test.describe("workbench", () => {
   test("?q= from the landing page's hero search pre-resolves the geography", async ({ page }) => {
     await page.goto("/app.html?q=euro%20area");
     await expect(page.locator("#head-name")).toHaveText("Euro area", { timeout: 10_000 });
+  });
+
+  test("searching unsupported countries raises alert, stops computation, and does not fall back to USA", async ({ page }) => {
+    await page.goto("/app.html?q=Thailand");
+    await expect(page.locator("#lens-alert")).toBeVisible();
+    await expect(page.locator("#lens-alert")).toContainText("Thailand");
+    await expect(page.locator("#calc-unavailable")).toBeVisible();
+    await expect(page.locator("#calc-unavailable")).toContainText("NO CALCULATION PERFORMED");
+    await expect(page.locator("#mgrid")).toHaveCount(0);
+    await expect(page.locator("#axis")).toHaveCount(0);
+    await expect(page.locator('#geo-rail button[data-geo="USA"]')).not.toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator('#geo-rail button[data-geo="EA"]')).not.toHaveAttribute("aria-pressed", "true");
+
+    // Switching to USA recovers calculation
+    await page.click('#calc-unavailable button:has-text("Switch to United States")');
+    await expect(page.locator("#calc-unavailable")).toHaveCount(0);
+    await expect(page.locator("#mgrid .mcard")).not.toHaveCount(0);
+    await expect(page.locator('#geo-rail button[data-geo="USA"]')).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("typing unsupported country in workbench and hitting Enter alerts user without computing", async ({ page }) => {
+    await page.goto("/app.html");
+    await page.fill("#q", "Argentina");
+    await page.press("#q", "Enter");
+    await expect(page.locator("#lens-alert")).toBeVisible();
+    await expect(page.locator("#lens-alert")).toContainText("Argentina");
+    await expect(page.locator("#calc-unavailable")).toBeVisible();
+    await expect(page.locator("#mgrid")).toHaveCount(0);
+  });
+
+  test("search supports case-insensitive and short queries like US and EU", async ({ page }) => {
+    await page.goto("/app.html");
+    await page.fill("#q", "eu");
+    await expect(page.locator("#head-name")).toHaveText("Euro area", { timeout: 10_000 });
+    await expect(page.locator('#geo-rail button[data-geo="EA"]')).toHaveAttribute("aria-pressed", "true");
+
+    await page.fill("#q", "US");
+    await expect(page.locator("#head-name")).toHaveText("United States", { timeout: 10_000 });
+    await expect(page.locator('#geo-rail button[data-geo="USA"]')).toHaveAttribute("aria-pressed", "true");
   });
 
   test("your-basket estimate recomputes from the live category rates", async ({ page }) => {

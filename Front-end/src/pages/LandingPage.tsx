@@ -369,7 +369,12 @@ export function LandingPage({
             <a className="btn-lg" href="app.html">
               Open the engine
             </a>
-            <a className="btn-lg ghost" href="#sources">
+            <a
+              className="btn-lg ghost"
+              href="https://github.com/Thanadon912/InflationLens/blob/main/docs/COUNTRY_INFLATION_METHODS.md"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               Read the methodology
             </a>
           </div>

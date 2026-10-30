@@ -19,6 +19,12 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .sbox svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:color-mix(in srgb,var(--paper) 50%,transparent)}
 .top .who{margin-left:auto;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:color-mix(in srgb,var(--paper) 55%,transparent);white-space:nowrap}
 @media (max-width:700px){.top .who{display:none}}
+@media (max-width:600px){
+  .top .bar{padding:6px var(--edge);gap:10px}
+  .brand{font-size:14px;gap:6px;min-height:44px;display:inline-flex;align-items:center}
+  .sbox input{font-size:13px;padding:11px 10px 11px 32px;min-height:44px}
+  .sbox svg{left:10px;width:14px;height:14px}
+}
 
 /* — the three-column workbench — */
 .work{display:grid;grid-template-columns:236px minmax(0,1fr) 260px;gap:0;align-items:start;min-height:calc(100vh - 47px)}
@@ -26,7 +32,19 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .left{border-right:1px solid var(--color-divider);position:sticky;top:47px}
 .right{border-left:1px solid var(--color-divider);position:sticky;top:47px}
 @media (max-width:1140px){.work{grid-template-columns:220px minmax(0,1fr)}.right{grid-column:1/-1;border-left:0;border-top:1px solid var(--color-divider);position:static}}
-@media (max-width:760px){.work{grid-template-columns:1fr}.left{border-right:0;border-bottom:1px solid var(--color-divider);position:static}}
+@media (max-width:760px){
+  .work{grid-template-columns:1fr}
+  .left{border-right:0;border-bottom:1px solid var(--color-divider);position:static;padding:var(--half) var(--edge)}
+  .grp{margin-bottom:var(--half)}
+  .opts{flex-direction:row;flex-wrap:wrap}
+  .opts button{flex:1 1 auto;min-height:44px;padding:10px 8px;font-size:12.5px;text-align:center;justify-content:center;border-bottom:0;border-right:1px solid var(--color-divider)}
+  .opts button:last-child{border-right:0}
+  .spread{padding:var(--half)}
+  .axis{margin:18px 12px 0}
+  .axis .dot span{font-size:8.5px;letter-spacing:.04em}
+  .axis .dot b{font-size:12px}
+  .two{grid-template-columns:1fr;gap:var(--lead)}
+}
 
 .grp{margin-bottom:calc(1.4*var(--lead))}
 .grp h6{margin:0 0 10px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--ink) 52%,transparent)}
@@ -39,7 +57,7 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .wt{display:grid;gap:10px}
 .wt label{display:grid;grid-template-columns:1fr auto;font-size:12px;gap:4px;color:color-mix(in srgb,var(--ink) 78%,transparent)}
 .wt b{font-family:var(--font-heading);font-weight:600;font-feature-settings:"tnum" 1}
-.wt input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--steel);height:16px}
+.wt input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--steel);height:28px;padding:4px 0;cursor:pointer}
 .mini-note{font-size:11px;line-height:1.5;color:color-mix(in srgb,var(--ink) 55%,transparent);margin:0}
 
 /* — the headline block — */
@@ -54,12 +72,12 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .spread .cap{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px}
 .spread .cap h2{font-family:var(--font-heading);font-weight:600;font-size:17px;text-transform:uppercase;letter-spacing:.04em;margin:0}
 .spread .cap em{font-style:normal;font-size:12px;color:color-mix(in srgb,var(--ink) 55%,transparent)}
-.axis{position:relative;height:152px;margin-top:18px}
+.axis{position:relative;height:152px;margin:18px 28px 0;transition:height .2s}
 .axis .tick{position:absolute;top:0;bottom:22px;width:1px;background:color-mix(in srgb,var(--ink) 12%,transparent)}
-.axis .tick s{position:absolute;bottom:-19px;left:0;transform:translateX(-50%);font-size:10.5px;letter-spacing:.08em;text-decoration:none;color:color-mix(in srgb,var(--ink) 55%,transparent);font-feature-settings:"tnum" 1}
+.axis .tick s{position:absolute;bottom:-19px;left:0;transform:translateX(-50%);font-size:10.5px;letter-spacing:.08em;text-decoration:none;color:color-mix(in srgb,var(--ink) 55%,transparent);font-feature-settings:"tnum" 1;white-space:nowrap}
 .axis .tick.target{background:none;border-left:1px dashed var(--steel);width:0}
-.axis .tick.target s{color:var(--color-accent-700)}
-.axis .dot{position:absolute;transform:translateX(-50%);text-align:center}
+.axis .tick.target s{color:var(--color-accent-700);bottom:auto;top:-16px;text-transform:uppercase;font-size:9.5px}
+.axis .dot{position:absolute;transform:translateX(-50%);text-align:center;background:var(--paper);padding:0 3px;z-index:1}
 .axis .dot i{display:block;width:11px;height:11px;background:var(--steel);border:1px solid var(--color-accent-800);margin:0 auto 4px}
 .axis .dot span{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:color-mix(in srgb,var(--ink) 68%,transparent);white-space:nowrap}
 .axis .dot b{display:block;font-family:var(--font-heading);font-weight:600;font-size:14px;font-feature-settings:"tnum" 1}
@@ -84,6 +102,10 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .tbl .track i{display:block;height:100%;background:var(--steel)}
 .tbl tr:hover{background:color-mix(in srgb,var(--ink) 3%,transparent)}
 .tbl tr[hidden]{display:none}
+.tbl td.region{color:color-mix(in srgb,var(--ink) 65%,transparent);font-size:12px}
+.tbl-scroll{max-height:420px;overflow-y:auto;border-bottom:1px solid var(--color-divider)}
+.tbl-scroll thead th{position:sticky;top:0;background:var(--paper);z-index:1}
+.empty,.filter-status{margin:0 0 var(--lead);padding:10px 12px;border:1px dashed var(--color-divider);font-size:13px;color:color-mix(in srgb,var(--ink) 72%,transparent)}
 .two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:calc(1.4*var(--lead))}
 .blk h2{font-family:var(--font-heading);font-weight:600;font-size:19px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 4px}
 .blk p.sub{margin:0 0 var(--half);font-size:12px;color:color-mix(in srgb,var(--ink) 58%,transparent)}
@@ -97,7 +119,7 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .prov b{font-family:var(--font-heading);font-weight:600;font-size:13px;letter-spacing:.05em;text-transform:uppercase;display:block}
 .prov span{color:color-mix(in srgb,var(--ink) 58%,transparent);display:block}
 .prov em{font-style:normal;font-feature-settings:"tnum" 1;color:color-mix(in srgb,var(--ink) 70%,transparent)}
-.btn-out{display:block;width:100%;text-align:center;padding:11px;border:1px solid color-mix(in srgb,var(--ink) 26%,transparent);background:none;cursor:pointer;font-family:var(--font-heading);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);margin-bottom:8px}
+.btn-out{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;text-align:center;padding:11px 14px;border:1px solid color-mix(in srgb,var(--ink) 26%,transparent);background:none;cursor:pointer;font-family:var(--font-heading);font-weight:600;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);margin-bottom:8px;box-sizing:border-box}
 .btn-out:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);text-decoration:none;color:var(--ink)}
 
 #lens-alert{display:none;background:var(--field);color:var(--paper);font-size:12.5px;letter-spacing:.02em;padding:9px var(--edge);text-align:center;border-bottom:2px solid var(--color-accent-300)}
@@ -106,3 +128,11 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 main.pane[data-stale] .spread,
 main.pane[data-stale] .mgrid,
 main.pane[data-stale] #geo-scoped-tables{opacity:.45}
+
+.calc-unavailable-card{margin:32px 0;padding:32px 28px;background:color-mix(in srgb,var(--paper) 92%,var(--ink));border:1px solid color-mix(in srgb,var(--ink) 18%,transparent);border-left:4px solid var(--color-accent-400)}
+.calc-unavailable-card .unavail-badge{display:inline-block;font-family:var(--font-heading);font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--color-accent-400);margin-bottom:12px}
+.calc-unavailable-card h3{font-family:var(--font-heading);font-size:20px;margin:0 0 12px;color:var(--ink)}
+.calc-unavailable-card p{font-size:14px;line-height:1.6;color:color-mix(in srgb,var(--ink) 80%,transparent);margin:0 0 14px;max-width:620px}
+.calc-unavailable-card .unavail-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
+.calc-unavailable-card .btn-switch{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 16px;font-family:var(--font-heading);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--ink);color:var(--paper);border:1px solid var(--ink);cursor:pointer;transition:opacity .15s ease}
+.calc-unavailable-card .btn-switch:hover{opacity:.88}
