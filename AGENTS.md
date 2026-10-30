@@ -42,20 +42,22 @@ Inspect screenshots generated in the artifact directory (`mobile_landing_*.png`,
 
 ---
 
-## 2. Desktop Visual, Typography & Cartography Standards (Impeccable Doctrine)
+## 2. Desktop Visual, Typography & Layout Standards (Impeccable Doctrine)
 
-- **Scroll Synchronization & Reveal**:
-  - In `#showcase`, all 7 national inflation measures must be 100% visible immediately when Act 2 enters. Never use aggressive scroll-stagger formulas (`var(--rev) * 7.5 - var(--i) * 0.65`) that hide later items during normal reading positions.
-- **Perspective & Cartographic Alignment**:
-  - During zoom transitions between different map projections (e.g. Natural Earth world map to Albers USA state map), the camera must smoothly track and glide the focus point (`[cx, cy] -> [targetX, targetY]`) matching the exact scale ratio (`wUs / wWorld`). The cross-dissolve must happen at the exact same screen position so there is zero teleportation, double-exposure ghosting, or perspective disorientation.
-- **Level of Detail (LOD) & Decluttering**:
-  - When zooming closer into a regional subject, unimportant macro data (such as global latitude/longitude graticules and distant country extreme tails) must fade out early so they do not become distracting visual clutter.
+- **Capabilities Studio Showcase**:
+  - The Showcase features 4 interactive studio lenses:
+    1. **Multi-Measure Spread**: Horizontal dot-ladder comparison across all 7 national inflation metrics with dynamic gap indicator and source annotations.
+    2. **Regional Disparity**: Interactive choropleth map switching between US Census regions and Euro Area member states with real-time hover cards.
+    3. **Category Drivers**: Top positive and negative category contributors with proportional deviation bars and relative weights.
+    4. **Personal Basket Simulator**: Interactive spending category sliders and demographic presets (Young Renters, Commuter Family, Fixed-Income Retiree) demonstrating personal inflation divergence.
+- **Scroll & Viewport Integrity**:
+  - Studio lenses must maintain zero vertical clipping and zero horizontal overflow.
+  - Tab navigation must be fully keyboard accessible (`role="tablist"` / `role="tab"` / arrow key navigation) with clear focus indicators.
 - **Layout Breathing Room & Grid Integrity**:
-  - Container widths for data panels must account for padding. Content width must ensure multi-column components (like the 2-column By Category ladder) have at least ~260px per column so category names, progress bars, and percentage values never collide or overlap.
+  - Data containers must maintain clean padding and consistent typography hierarchy.
+  - Multi-column tables and category bars must allocate sufficient width (minimum 240px per column) to prevent text clipping or wrapping of numerical percentages.
 - **Footnote & Disclaimer Placement**:
-  - Disclaimers explaining the map (such as `"State shading is MODELLED..."`) must be positioned logically without interrupting data flow or pushing category tables off-screen.
-- **Vertical Budget**:
-  - The left column of Act 2 must fit within standard viewport heights (e.g. 768px – 963px) without vertical clipping or overflow.
+  - Disclaimers explaining modeled data (e.g. `"State shading is MODELLED..."`) must remain distinct, bordered with subtle dashed borders, and never overlap interactive controls or primary charts.
 
 ---
 

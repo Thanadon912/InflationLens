@@ -5,11 +5,14 @@ React 19 + TypeScript + Vite frontend for the Inflation Lens engine. It consists
 ## Surfaces
 
 1. **Landing Page (`index.html` / `src/pages/LandingPage.tsx`)**
-   - Hero search console with live entity resolution (`/api/v1/resolve`).
-   - Two-act scrollytelling showcase:
-     - **Act 1:** World choropleth projection with global headline rate and benchmark economies.
-     - **Act 2:** United States state-level choropleth with 7-measure inflation spread and category ladder.
-   - **Mobile Flat Mode:** On mobile devices (`<= 880px`) or `prefers-reduced-motion: reduce`, the showcase gracefully drops scroll-pinning into a cleanly stacked natural reading flow with full map visibility and category ladders.
+   - Brand favicon package and initial preloader animation.
+   - Hero search console with live entity resolution (`/api/v1/resolve`) and country routing.
+   - **Capabilities Studio Showcase (`ShowcaseStage.tsx`):**
+     - **Multi-Measure Spread Lens:** 7-metric horizontal dot spread, divergence badge, and source citations.
+     - **Regional Disparity Lens:** Dynamic choropleth map switching between US Census regions and Euro Area member states with interactive hover states.
+     - **Category Drivers Lens:** Top inflation contributors with proportional deviation bars and relative weights.
+     - **Personal Basket Simulator:** Interactive spending category weight sliders and demographic quick presets.
+   - **Mobile Responsive Design:** Cleanly stacked natural reading flow (`body[data-flat]`) on narrow viewports (`<= 880px`) with touch-friendly controls and zero horizontal scroll.
    - Engine architectural pipeline and full official data source ledger.
 
 2. **Workbench (`app.html` / `src/pages/WorkbenchPage.tsx`)**
@@ -49,7 +52,7 @@ VITE_API_BASE_URL=http://localhost:5055/api/v1 npm run build
 End-to-end tests are written in [Playwright](https://playwright.dev) under `e2e/`:
 
 ```bash
-# Run all 26 E2E tests (automatically launches backend test server if not running)
+# Run all 32 E2E tests (automatically launches backend test server if not running)
 npx playwright test
 ```
 
