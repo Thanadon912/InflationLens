@@ -40,6 +40,7 @@ interface GeometryState {
   gratD: string;
   usaHighlightD: string;
   usCenterPoint: [number, number];
+  usTargetPoint: [number, number];
   worldCountries: WorldCountryPath[];
   usStates: UsStatePath[];
   usOutlineD: string;
@@ -145,6 +146,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
           gratD,
           usaHighlightD,
           usCenterPoint: [projectedCenter[0], projectedCenter[1]],
+          usTargetPoint: [505, 237],
           worldCountries,
           usStates,
           usOutlineD,
@@ -203,7 +205,10 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
       uo: number,
       us: number,
       a2: number,
-      rev: number
+      rev: number,
+      gratOp = 1,
+      tailOp = 1,
+      camProgress = 0
     ) => {
       const s = stage.style;
       s.setProperty("--a1", String(a1));
@@ -212,10 +217,16 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
       s.setProperty("--us", String(us));
       s.setProperty("--a2", String(a2));
       s.setProperty("--rev", String(rev));
+      s.setProperty("--grat-op", String(gratOp));
+      s.setProperty("--tail-op", String(tailOp));
+
       const [cx, cy] = geo.usCenterPoint;
+      const [tx, ty] = geo.usTargetPoint;
+      const curX = cx + (tx - cx) * camProgress;
+      const curY = cy + (ty - cy) * camProgress;
       wZoom.setAttribute(
         "transform",
-        `translate(${cx} ${cy}) scale(${k}) translate(${-cx} ${-cy})`
+        `translate(${curX} ${curY}) scale(${k}) translate(${-cx} ${-cy})`
       );
     };
 
@@ -226,7 +237,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
       if (isFlat()) {
         p = 1;
         document.body.setAttribute("data-flat", "");
-        setVars(1, 1, 1, 1, 1, 1, 1);
+        setVars(1, 1, 1, 1, 1, 1, 1, 1, 1, 0);
         drawLines();
         return;
       }
@@ -238,18 +249,32 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
       if (p > 0.005 || r.top < window.innerHeight * 0.8) {
         drawLines();
       }
-      const k = 1 + easeInOutQuad(span(p, 0.2, 0.52)) * 6.2;
-      setVars(
-        1 - span(p, 0.3, 0.44),
-        k,
-        1 - span(p, 0.32, 0.47),
-        span(p, 0.34, 0.5),
-        0.8 + span(p, 0.28, 0.56) * 0.2,
-        span(p, 0.44, 0.54),
-        span(p, 0.44, 0.54)
-      );
+
+      // Camera smoothly zooms and tracks into USA position
+      const camT = easeInOutQuad(span(p, 0.18, 0.44));
+      const k = 1 + camT * 2.77;
+
+      // Declutter macro elements as zoom approaches USA
+      const gratOp = 1 - span(p, 0.14, 0.26);
+      const tailOp = 1 - span(p, 0.16, 0.28);
+
+      // Act 1 text glides out before Act 2 enters
+      const a1 = 1 - span(p, 0.28, 0.38);
+
+      // Clean cross-dissolve between world map and state-level US map
+      const wo = 1 - span(p, 0.37, 0.46);
+      const uo = span(p, 0.40, 0.48);
+
+      // US map settles cleanly into view
+      const us = 0.95 + span(p, 0.40, 0.52) * 0.05;
+
+      // Act 2 arrives with full clarity
+      const a2 = span(p, 0.43, 0.52);
+      const rev = span(p, 0.44, 0.54);
+
+      setVars(a1, k, wo, uo, us, a2, rev, gratOp, tailOp, camT);
       railFill.style.transform = `scaleY(${p})`;
-      const active = p < 0.42 ? 0 : 1;
+      const active = p < 0.40 ? 0 : 1;
       dot0Ref.current?.toggleAttribute("data-on", active === 0);
       dot1Ref.current?.toggleAttribute("data-on", active === 1);
     };

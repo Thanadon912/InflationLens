@@ -64,7 +64,8 @@ test.describe("visual audit - desktop and mobile", () => {
         a2,
         mRows,
         flagRect: flagRect ? { top: flagRect.top, bottom: flagRect.bottom, height: flagRect.height } : null,
-        catsRect: catsRect ? { top: catsRect.top, bottom: catsRect.bottom, height: catsRect.height } : null,
+        catsRect: catsRect ? { top: catsRect.top, bottom: catsRect.bottom, width: catsRect.width, height: catsRect.height } : null,
+        catBars: catBars.map((cb) => ({ text: cb.text, rect: { x: cb.rect.x, width: cb.rect.width, right: cb.rect.right } })),
         catBarsCount: catBars.length,
         viewportHeight: window.innerHeight,
       };
@@ -99,19 +100,22 @@ test.describe("visual audit - desktop and mobile", () => {
       fullPage: false,
     });
 
-    // Also test p=0.70
-    await page.evaluate(() => {
-      const el = document.getElementById("showcase");
-      if (el) {
-        const run = el.offsetHeight - window.innerHeight;
-        window.scrollTo({ top: el.offsetTop + run * 0.70, behavior: "instant" });
-      }
-    });
-    await page.waitForTimeout(300);
-    await page.screenshot({
-      path: path.join(ARTIFACT_DIR, "desktop_act2_p70.png"),
-      fullPage: false,
-    });
+    // Capture series of scroll progression to critique zoom and overlap
+    const pSteps = [0.0, 0.25, 0.38, 0.45, 0.55, 0.75];
+    for (const step of pSteps) {
+      await page.evaluate((val) => {
+        const el = document.getElementById("showcase");
+        if (el) {
+          const run = el.offsetHeight - window.innerHeight;
+          window.scrollTo({ top: el.offsetTop + run * val, behavior: "instant" });
+        }
+      }, step);
+      await page.waitForTimeout(300);
+      await page.screenshot({
+        path: path.join(ARTIFACT_DIR, `showcase_step_${Math.round(step * 100)}.png`),
+        fullPage: false,
+      });
+    }
   });
 
   test("inspect mobile viewports at 390x844", async ({ page }) => {

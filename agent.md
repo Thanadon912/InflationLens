@@ -42,10 +42,16 @@ Inspect screenshots generated in the artifact directory (`mobile_landing_*.png`,
 
 ---
 
-## 2. Desktop Visual & Cartography Standards
+## 2. Desktop Visual, Typography & Cartography Standards (Impeccable Doctrine)
 
 - **Scroll Synchronization & Reveal**:
   - In `#showcase`, all 7 national inflation measures must be 100% visible immediately when Act 2 enters. Never use aggressive scroll-stagger formulas (`var(--rev) * 7.5 - var(--i) * 0.65`) that hide later items during normal reading positions.
+- **Perspective & Cartographic Alignment**:
+  - During zoom transitions between different map projections (e.g. Natural Earth world map to Albers USA state map), the camera must smoothly track and glide the focus point (`[cx, cy] -> [targetX, targetY]`) matching the exact scale ratio (`wUs / wWorld`). The cross-dissolve must happen at the exact same screen position so there is zero teleportation, double-exposure ghosting, or perspective disorientation.
+- **Level of Detail (LOD) & Decluttering**:
+  - When zooming closer into a regional subject, unimportant macro data (such as global latitude/longitude graticules and distant country extreme tails) must fade out early so they do not become distracting visual clutter.
+- **Layout Breathing Room & Grid Integrity**:
+  - Container widths for data panels must account for padding. Content width must ensure multi-column components (like the 2-column By Category ladder) have at least ~260px per column so category names, progress bars, and percentage values never collide or overlap.
 - **Footnote & Disclaimer Placement**:
   - Disclaimers explaining the map (such as `"State shading is MODELLED..."`) must be positioned logically without interrupting data flow or pushing category tables off-screen.
 - **Vertical Budget**:
