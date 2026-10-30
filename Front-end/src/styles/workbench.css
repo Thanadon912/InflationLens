@@ -19,11 +19,12 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .sbox svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:color-mix(in srgb,var(--paper) 50%,transparent)}
 .top .who{margin-left:auto;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:color-mix(in srgb,var(--paper) 55%,transparent);white-space:nowrap}
 @media (max-width:700px){.top .who{display:none}}
-@media (max-width:600px){
-  .top .bar{padding:6px var(--edge);gap:10px}
-  .brand{font-size:14px;gap:6px;min-height:44px;display:inline-flex;align-items:center}
-  .sbox input{font-size:13px;padding:11px 10px 11px 32px;min-height:44px}
-  .sbox svg{left:10px;width:14px;height:14px}
+@media (max-width:640px){
+  .top .bar{padding:8px var(--edge);gap:8px;flex-wrap:wrap}
+  .brand{font-size:15px;min-height:36px}
+  .sbox{flex:none!important;width:100%;order:3;max-width:none}
+  .sbox input{font-size:13px;padding:9px 10px 9px 34px;min-height:38px}
+  .top .who{display:inline-block;margin-left:auto;font-size:10px}
 }
 
 /* — the three-column workbench — */
@@ -31,20 +32,6 @@ a:hover{color:var(--color-accent-800);text-decoration:underline;text-underline-o
 .pane{padding:var(--lead) var(--edge)}
 .left{border-right:1px solid var(--color-divider);position:sticky;top:47px}
 .right{border-left:1px solid var(--color-divider);position:sticky;top:47px}
-@media (max-width:1140px){.work{grid-template-columns:220px minmax(0,1fr)}.right{grid-column:1/-1;border-left:0;border-top:1px solid var(--color-divider);position:static}}
-@media (max-width:760px){
-  .work{grid-template-columns:1fr}
-  .left{border-right:0;border-bottom:1px solid var(--color-divider);position:static;padding:var(--half) var(--edge)}
-  .grp{margin-bottom:var(--half)}
-  .opts{flex-direction:row;flex-wrap:wrap}
-  .opts button{flex:1 1 auto;min-height:44px;padding:10px 8px;font-size:12.5px;text-align:center;justify-content:center;border-bottom:0;border-right:1px solid var(--color-divider)}
-  .opts button:last-child{border-right:0}
-  .spread{padding:var(--half)}
-  .axis{margin:18px 12px 0}
-  .axis .dot span{font-size:8.5px;letter-spacing:.04em}
-  .axis .dot b{font-size:12px}
-  .two{grid-template-columns:1fr;gap:var(--lead)}
-}
 
 .grp{margin-bottom:calc(1.4*var(--lead))}
 .grp h6{margin:0 0 10px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,var(--ink) 52%,transparent)}
@@ -136,3 +123,25 @@ main.pane[data-stale] #geo-scoped-tables{opacity:.45}
 .calc-unavailable-card .unavail-actions{display:flex;gap:12px;margin-top:20px;flex-wrap:wrap}
 .calc-unavailable-card .btn-switch{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:8px 16px;font-family:var(--font-heading);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--ink);color:var(--paper);border:1px solid var(--ink);cursor:pointer;transition:opacity .15s ease}
 .calc-unavailable-card .btn-switch:hover{opacity:.88}
+
+@media (max-width:1140px){
+  .work{grid-template-columns:220px minmax(0,1fr)}
+  .right{grid-column:1/-1;border-left:0;border-top:1px solid var(--color-divider);position:static}
+}
+@media (max-width:760px){
+  .work{grid-template-columns:1fr}
+  .left{border-right:0;border-bottom:1px solid var(--color-divider);position:static;padding:12px var(--edge);background:color-mix(in srgb,var(--paper) 98%,var(--ink))}
+  .grp{margin-bottom:10px}
+  .grp h6{margin:0 0 5px;font-size:9.5px}
+  .opts{flex-direction:row!important;flex-wrap:nowrap;border:1px solid var(--color-divider);border-radius:3px;overflow:hidden}
+  .opts button{flex:1 1 0;min-height:38px;padding:8px 4px;font-size:11px;text-align:center;justify-content:center;border-bottom:0!important;border-right:1px solid var(--color-divider);white-space:nowrap}
+  .opts button:last-child{border-right:0}
+  .wt{gap:6px}
+  .wt label{font-size:11px}
+  .wt input[type=range]{height:24px}
+  .spread{padding:12px}
+  .axis{margin:18px 8px 0}
+  .axis .dot span{font-size:8px;letter-spacing:.03em}
+  .axis .dot b{font-size:11.5px}
+  .two{grid-template-columns:1fr;gap:var(--lead)}
+}

@@ -246,7 +246,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
         span(p, 0.34, 0.5),
         0.8 + span(p, 0.28, 0.56) * 0.2,
         span(p, 0.44, 0.54),
-        span(p, 0.44, 0.68)
+        span(p, 0.44, 0.54)
       );
       railFill.style.transform = `scaleY(${p})`;
       const active = p < 0.42 ? 0 : 1;
@@ -487,22 +487,6 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                   })}
                 </ul>
               </div>
-              <p className="flag">
-                State shading is{" "}
-                <strong
-                  style={{
-                    font: "inherit",
-                    textTransform: "uppercase",
-                    letterSpacing: ".1em",
-                  }}
-                >
-                  modelled
-                </strong>{" "}
-                — BLS publishes no state-level CPI. Every state&apos;s figure is
-                its census region&apos;s own published CPI, and the engine
-                labels every modelled figure as one. Hover a state to see its
-                region.
-              </p>
             </div>
             <div className="cats">
               <h6
@@ -568,6 +552,22 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                   </ul>
                 </div>
               </div>
+              <p className="flag">
+                State shading is{" "}
+                <strong
+                  style={{
+                    font: "inherit",
+                    textTransform: "uppercase",
+                    letterSpacing: ".1em",
+                  }}
+                >
+                  modelled
+                </strong>{" "}
+                — BLS publishes no state-level CPI. Every state&apos;s figure is
+                its census region&apos;s own published CPI, and the engine
+                labels every modelled figure as one. Hover a state to see its
+                region.
+              </p>
             </div>
           </div>
         </div>
