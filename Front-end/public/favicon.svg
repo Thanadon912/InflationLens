@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#162434" />
+      <stop offset="100%" stop-color="#0a0f16" />
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a3cdfa" />
+      <stop offset="100%" stop-color="#4f7a9f" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="116" fill="url(#bgGrad)" stroke="#263d54" stroke-width="14" />
+  
+  <!-- Handle drawn under circle -->
+  <line x1="290" y1="290" x2="404" y2="404" stroke="url(#lensGrad)" stroke-width="40" stroke-linecap="round" />
+  
+  <!-- Outer Lens Ring -->
+  <circle cx="220" cy="220" r="116" fill="#0c1520" stroke="url(#lensGrad)" stroke-width="36" />
+  
+  <!-- Crosshairs -->
+  <line x1="220" y1="148" x2="220" y2="292" stroke="#f0f6fc" stroke-width="22" stroke-linecap="round" />
+  <line x1="148" y1="220" x2="292" y2="220" stroke="#f0f6fc" stroke-width="22" stroke-linecap="round" />
+  
+  <!-- Focal Target Dot -->
+  <circle cx="220" cy="220" r="18" fill="#38bdf8" filter="url(#glow)" />
+</svg>
