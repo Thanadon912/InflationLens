@@ -69,14 +69,15 @@ class IngestionService:
                     raw_id = self.store.save_bundle(run_id, bundle)
                     for point in bundle.points:
                         point.mapping["source_url"] = bundle.request_url
-                        self.store.save_point(run_id, raw_id, point)
+                    self.store.save_points_batch(run_id, raw_id, bundle.points)
                 successes += 1
             except Exception as exc:  # isolate each source mapping/batch
                 failures += 1
                 self.store.add_issue(run_id, "PROVIDER_FETCH_FAILED", sanitize_text(str(exc)), provider=provider, geography=provider_mappings[0].get("geography"), indicator_id=provider_mappings[0].get("indicator_id"))
                 logger.warning("provider sync failed provider=%s error=%s", provider, type(exc).__name__)
         country_profiles = set(available_country_profiles())
-        for geo in sorted({m["geography"] for m in mappings if m["geography"] in country_profiles}):
+        dedicated_geos = {m["geography"] for m in mappings if m["geography"] in country_profiles}
+        for geo in sorted(dedicated_geos):
             self._derive_essential(run_id, geo)
             self._cross_source_checks(run_id, geo)
             for indicator_id in SUPPORTED_INDICATORS:
@@ -86,6 +87,17 @@ class IngestionService:
                     self.calculate_available(run_id, geo, indicator_id)
                 except Exception as exc:
                     self.store.add_issue(run_id, "CALCULATION_FAILED", sanitize_text(str(exc)), geography=geo, indicator_id=indicator_id)
+        # Materialize country-level headline results for all other configured
+        # country profiles present in the World Bank global cross-section.
+        if indicator in ("all", "headline_consumer_inflation"):
+            cross_geos = {
+                r["component_id"]
+                for r in self.store.latest_observations("GLOBAL", "median_country_inflation", "country_rates")
+                if r["component_id"] in country_profiles and r["component_id"] not in dedicated_geos
+            }
+            for geo in sorted(cross_geos):
+                if geography == "all" or geography == geo:
+                    self._calculate_headline_variants(run_id, geo)
         self.store.finish_run(run_id, successes=successes, failures=failures)
         return {"run_id": run_id, "status": "success" if failures == 0 else "partial" if successes else "failed", "successes": successes, "failures": failures, "issues": self.store.issues(run_id)}
 
@@ -165,7 +177,26 @@ class IngestionService:
         calculated = 0
         profile = load_country_profile(geography)
         limit = self.registry["defaults"]["monthly_backfill_periods"]
-        for mapping in self._headline_variants(geography):
+        variants = self._headline_variants(geography)
+        if not variants:
+            # Countries without a dedicated monthly CPI series in source_registry.yaml
+            # inherit their official annual CPI rate from the World Bank cross-section
+            # (FP.CPI.TOTL.ZG), avoiding N+1 per-country provider calls.
+            cross_rows = [
+                r for r in self.store.latest_observations("GLOBAL", "median_country_inflation", "country_rates")
+                if r["component_id"] == geography
+            ]
+            if not cross_rows:
+                return 0
+            return self._save_published_rate(
+                run_id,
+                geography,
+                "cpi",
+                None,
+                cross_rows[:limit],
+                config_version=profile.get("profile_version"),
+            )
+        for mapping in variants:
             measure_id, region_id = mapping.get("measure_id"), mapping.get("region_id")
             rows = [r for r in self.store.latest_observations(geography, "headline_consumer_inflation", "all_items_cpi_index") if r["source_series_id"] == mapping["series_id"]]
             if not rows:

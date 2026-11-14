@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 import hashlib
-import re
 
 from flask import Blueprint, jsonify, request
 
 from app.api.schemas import SchemaError
 from app.config.loader import (
+    available_country_profiles,
+    load_country_names,
     load_iso_numeric,
     load_methodology_versions,
     load_source_registry,
@@ -57,41 +58,40 @@ _PUBLISHERS = {
     "world_bank": {"org": "World Bank", "full": "World Bank Group", "url": "https://data.worldbank.org"},
 }
 
-# Entities the search endpoint can resolve. Kept deliberately small: the
-# engine only calculates for USA and EA (app/config/country_profiles/), so
-# resolving anything else would point the frontend at a dead end. See
-# README.md "Backend integration", integration point 5.
-_RESOLVABLE = (
-    {
-        "kind": "country",
-        "id": "USA",
-        "label": "United States",
-        "aliases": ("usa", "us", "united states", "america", "u.s.", "u.s.a.", "united states of america"),
-        "pattern": re.compile(r"\b(usa|us|united states|america|u\.s\.|u\.s\.a\.|united states of america)\b", re.IGNORECASE),
-    },
-    {
-        "kind": "country",
-        "id": "EA",
-        "label": "Euro area",
-        "aliases": ("ea", "eu", "euro area", "eurozone", "europe", "euro", "e.u.", "european union"),
-        "pattern": re.compile(r"\b(ea|eu|euro area|eurozone|europe|euro|e\.u\.|european union)\b", re.IGNORECASE),
-    },
-)
+# Primary multi-measure geographies keep shorthand 2-letter aliases ("us", "eu")
+# at the head of the resolver list, followed dynamically by all 220 other
+# configured country profiles from app/config/country_profiles/.
+_PRIMARY_ALIASES: dict[str, tuple[str, ...]] = {
+    "USA": ("usa", "us", "united states", "america", "u.s.", "u.s.a.", "united states of america"),
+    "EA": ("ea", "eu", "euro area", "eurozone", "europe", "euro", "e.u.", "european union"),
+}
+
+
+def _resolvable_entities() -> list[dict]:
+    names = load_country_names()
+    available = set(available_country_profiles())
+    ordered = ["USA", "EA"] + sorted(g for g in available if g not in {"USA", "EA"})
+    return [
+        {
+            "kind": "country",
+            "id": geo,
+            "label": names.get(geo, geo),
+            "aliases": _PRIMARY_ALIASES.get(geo, ()),
+        }
+        for geo in ordered
+        if geo in available
+    ]
 
 
 def _matches_entity(q: str, entity: dict) -> bool:
     entity_id = entity["id"].lower()
-    if q == entity_id or entity_id.startswith(q):
-        return True
     label = entity["label"].lower()
-    if q == label or q in label or label.startswith(q):
+    if q == entity_id or q == label:
         return True
     for alias in entity["aliases"]:
-        if q == alias or alias.startswith(q):
+        if q == alias or alias.startswith(q) or (len(alias) >= 3 and alias in q):
             return True
-        if len(alias) >= 3 and alias in q:
-            return True
-    if entity["pattern"].search(q):
+    if len(q) >= 3 and (label.startswith(q) or q in label):
         return True
     return False
 
@@ -103,12 +103,33 @@ def _not_found(message: str):
 def _headline_mappings(geography: str, *, region_id=None):
     """Every headline_consumer_inflation all_items_cpi_index mapping for
     this geography, keyed by measure_id, in source_registry.yaml order
-    (the ledger's display order)."""
+    (the ledger's display order). Geographies without dedicated national
+    monthly series inherit the shared World Bank annual CPI mapping."""
 
-    return {
+    explicit = {
         m["measure_id"]: m
         for m in load_source_registry()["sources"]
         if m["geography"] == geography and m["indicator_id"] == "headline_consumer_inflation" and m["role"] == "all_items_cpi_index" and m.get("region_id") == region_id and m.get("measure_id")
+    }
+    if explicit or region_id is not None or geography not in available_country_profiles():
+        return explicit
+    return {
+        "cpi": {
+            "geography": geography,
+            "indicator_id": "headline_consumer_inflation",
+            "role": "all_items_cpi_index",
+            "measure_id": "cpi",
+            "measure_code": "CPI",
+            "measure_name": "Headline CPI",
+            "measure_note": "All items, annual, World Bank WDI",
+            "provider": "world_bank",
+            "series_id": "FP.CPI.TOTL.ZG",
+            "frequency": "annual",
+            "unit": "percent_yoy",
+            "is_rate": True,
+            "seasonally_adjusted": False,
+            "primary": True,
+        }
     }
 
 
@@ -444,14 +465,13 @@ def world_cross_section():
 @data_bp.get("/resolve")
 def resolve():
     """Entity-resolution search (README.md integration point 5). Resolves
-    only what the engine actually covers -- USA and EA -- so a match is
-    never a dead end; anything else returns an empty match list rather
-    than a guess."""
+    all configured country profiles from app/config/country_profiles/ by
+    ISO code, display name, or shorthand alias."""
 
     q = (request.args.get("q") or "").strip().lower()
     matches = []
     if q:
-        for entity in _RESOLVABLE:
+        for entity in _resolvable_entities():
             if _matches_entity(q, entity):
                 matches.append({"kind": entity["kind"], "id": entity["id"], "label": entity["label"]})
     return jsonify({"query": q, "matches": matches})

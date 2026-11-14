@@ -61,7 +61,10 @@ def create_app() -> Flask:
     app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH_BYTES
     app.config["JSON_SORT_KEYS"] = False
 
-    allowed_origins = os.environ.get("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
+    allowed_origins = os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://localhost:5173,http://localhost:4173",
+    )
     CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in allowed_origins.split(",") if o.strip()]}})
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))

@@ -12,6 +12,8 @@ import { defineConfig, devices } from "@playwright/test";
  *  - the Vite dev server on :3000 for index.html / app.html. Port 3000 is in
  *    Flask's default CORS_ALLOWED_ORIGINS (app/factory.py).
  */
+const FRONTEND_PORT = process.env.FRONTEND_PORT || "3000";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
@@ -20,7 +22,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: `http://localhost:${FRONTEND_PORT}`,
     trace: "on-first-retry",
   },
   projects: [
@@ -36,6 +38,7 @@ export default defineConfig({
     {
       command:
         ".venv/bin/python scripts/seed_e2e_db.py instance/e2e-seed.sqlite3 && " +
+        `CORS_ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173,http://localhost:${FRONTEND_PORT}" ` +
         "INFLATION_DB_PATH=instance/e2e-seed.sqlite3 .venv/bin/python -m flask --app app run --port 5000",
       cwd: "../Back-end",
       url: "http://localhost:5000/api/v1/health",
@@ -43,9 +46,9 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "npm run build && npm run preview",
+      command: `npm run build && npx vite preview --port ${FRONTEND_PORT} --strictPort`,
       cwd: ".",
-      url: "http://localhost:3000/index.html",
+      url: `http://localhost:${FRONTEND_PORT}/index.html`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },

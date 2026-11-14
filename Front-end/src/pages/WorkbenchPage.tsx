@@ -165,12 +165,12 @@ export function WorkbenchPage({
         setGeo(nextGeo);
         void fetchScope(nextGeo, windowCode, adjustment);
       } else {
-        // Query specified a country that the multi-measure engine cannot compute
+        // Query specified a geography that is not in the 222 configured profiles
         setUnsupportedQuery(trimmed);
         setLens(null);
         setStale(true);
         setAlertMessage(
-          `“${trimmed}” is not currently supported by the calculation engine. The engine currently computes multi-dimensional inflation only for the United States (USA) and Euro area (EA).`
+          `“${trimmed}” could not be resolved to any of the 222 configured country profiles.`
         );
         document.body.setAttribute("data-lens", "unavailable");
       }
@@ -253,12 +253,15 @@ export function WorkbenchPage({
 
   const visibleSources = useMemo(
     () =>
-      (lens?.sources ?? []).filter((s) =>
-        s.cov
+      (lens?.sources ?? []).filter((s) => {
+        const covered = s.cov
           .split(",")
-          .map((c) => c.trim().toUpperCase())
-          .includes(geo)
-      ),
+          .map((c) => c.trim().toUpperCase());
+        return (
+          covered.includes(geo) ||
+          (geo !== "USA" && geo !== "EA" && covered.includes("GLOBAL"))
+        );
+      }),
     [lens, geo]
   );
 
@@ -279,19 +282,24 @@ export function WorkbenchPage({
   }, [lens, geo]);
 
   const normalizedFilter = searchQuery.trim().toLowerCase();
+  const activeGeoLabel = (GEO_LABELS[geo] || geo).toLowerCase();
   const isEntitySearch =
     normalizedFilter !== "" &&
-    [
-      "usa",
-      "us",
-      "united states",
-      "america",
-      "ea",
-      "euro area",
-      "eurozone",
-      "europe",
-      "euro",
-    ].some((alias) => alias.includes(normalizedFilter));
+    (normalizedFilter === geo.toLowerCase() ||
+      activeGeoLabel.includes(normalizedFilter) ||
+      [
+        "usa",
+        "us",
+        "united states",
+        "america",
+        "ea",
+        "eu",
+        "euro area",
+        "eurozone",
+        "europe",
+        "euro",
+        "european union",
+      ].some((alias) => alias.includes(normalizedFilter)));
   const tableFilter = isEntitySearch ? "" : normalizedFilter;
   const filterMatches =
     tableFilter === ""
@@ -393,6 +401,17 @@ export function WorkbenchPage({
                   {GEO_LABELS[g]}
                 </button>
               ))}
+              {!GEO_OPTIONS.includes(geo) && (
+                <button
+                  key={geo}
+                  type="button"
+                  data-geo={geo}
+                  aria-pressed={!unsupportedQuery}
+                  onClick={() => handleGeoChange(geo)}
+                >
+                  {GEO_LABELS[geo] || geo}
+                </button>
+              )}
             </div>
           </div>
 
@@ -731,29 +750,38 @@ export function WorkbenchPage({
                   </tr>
                 </thead>
                 <tbody id="cats">
-                  {categories.map((c) => {
-                    const key = c.name.toLowerCase();
-                    const isHidden =
-                      tableFilter !== "" && !key.includes(tableFilter);
-                    return (
-                      <tr key={c.name} data-k={key} hidden={isHidden}>
-                        <td>{c.name}</td>
-                        <td>
-                          <span className="track">
-                            <i
-                              style={{
-                                width: `${(
-                                  (c.v / maxCategoryValue) *
-                                  100
-                                ).toFixed(1)}%`,
-                              }}
-                            />
-                          </span>
-                        </td>
-                        <td className="v">{formatPercent(c.v)}</td>
-                      </tr>
-                    );
-                  })}
+                  {categories.length === 0 ? (
+                    <tr data-k="unavailable">
+                      <td colSpan={3}>
+                        Category-level component breakdowns are not published by
+                        the configured provider for {GEO_LABELS[geo] || geo}.
+                      </td>
+                    </tr>
+                  ) : (
+                    categories.map((c) => {
+                      const key = c.name.toLowerCase();
+                      const isHidden =
+                        tableFilter !== "" && !key.includes(tableFilter);
+                      return (
+                        <tr key={c.name} data-k={key} hidden={isHidden}>
+                          <td>{c.name}</td>
+                          <td>
+                            <span className="track">
+                              <i
+                                style={{
+                                  width: `${(
+                                    (c.v / maxCategoryValue) *
+                                    100
+                                  ).toFixed(1)}%`,
+                                }}
+                              />
+                            </span>
+                          </td>
+                          <td className="v">{formatPercent(c.v)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>

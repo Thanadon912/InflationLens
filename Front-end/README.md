@@ -17,8 +17,8 @@ React 19 + TypeScript + Vite frontend for the Inflation Lens engine. It consists
 
 2. **Workbench (`app.html` / `src/pages/WorkbenchPage.tsx`)**
    - Three-column responsive workspace:
-     - **Left Rail:** Geography (`USA` / `EA`), Window (`12m` / `1m` / `6m`), Seasonal Adjustment (`as_published` / `sa`), and interactive user-basket reweighting sliders.
-     - **Main Pane:** Dynamic multi-measure spread axis with greedy row-staggered dot packing (`layoutAxisDots`) to prevent label collisions on both desktop and mobile, live measure cards, and scrollable state/category breakdown tables.
+     - **Left Rail:** Quick-switch Geography (`USA` / `EA` plus any active country resolved from the 222 configured profiles), Window (`12m` / `1m` / `6m`), Seasonal Adjustment (`as_published` / `sa` / `nsa`), and interactive user-basket reweighting sliders.
+     - **Main Pane:** Dynamic multi-measure spread axis with greedy row-staggered dot packing (`layoutAxisDots`) to prevent label collisions on both desktop and mobile, live measure cards, and scrollable state/category breakdown tables with graceful empty states for annual-only providers.
      - **Right Rail:** Provenance and methodology ledger for active figures on screen, plus one-click CSV export.
 
 ## Development

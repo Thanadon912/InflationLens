@@ -88,6 +88,8 @@ def seeded_store(tmp_path, monkeypatch):
     world_mapping = {"provider": "world_bank", "series_id": "FP.CPI.TOTL.ZG", "indicator_id": "median_country_inflation", "role": "country_rates", "geography": "GLOBAL", "frequency": "annual", "unit": "percent_yoy"}
     for iso3, name, value in (("USA", "United States", 999.0), ("FRA", "France", 2.4), ("VEN", "Venezuela, RB", 387.0)):
         store.save_point(run, world_bank_raw, SourcePoint({**world_mapping, "component_id": iso3}, "2024", value, provider_status=name))
+    service.calculate_available(run, "FRA", "headline_consumer_inflation")
+    service.calculate_available(run, "THA", "headline_consumer_inflation")  # no observations seeded -> 0
 
     return store
 
@@ -133,7 +135,11 @@ class TestMeasures:
         assert {m["id"] for m in nsa_only["measures"]} == {"cpi", "core", "ccpi", "ppi"}
 
     def test_unknown_geography_is_404(self, client):
-        assert client.get("/api/v1/measures/THA").status_code == 404
+        assert client.get("/api/v1/measures/ZZZ").status_code == 404
+        fra = client.get("/api/v1/measures/FRA").get_json()
+        assert fra["measures"][0]["yoy"] == pytest.approx(2.4)
+        tha = client.get("/api/v1/measures/THA").get_json()
+        assert tha["measures"][0]["coverage"] == "unavailable"
 
     def test_unknown_window_is_400_not_silently_ignored(self, client):
         # Regression: an unrecognised ?window used to fall through to the
@@ -222,12 +228,13 @@ class TestResolve:
         assert client.get("/api/v1/resolve?q=USA").get_json()["matches"][0]["id"] == "USA"
         assert client.get("/api/v1/resolve?q=United+States+of+America").get_json()["matches"][0]["id"] == "USA"
         assert client.get("/api/v1/resolve?q=European+Union").get_json()["matches"][0]["id"] == "EA"
-        assert client.get("/api/v1/resolve?q=thailand").get_json()["matches"] == []
-        assert client.get("/api/v1/resolve?q=Thailand").get_json()["matches"] == []
-        assert client.get("/api/v1/resolve?q=argentina").get_json()["matches"] == []
-        assert client.get("/api/v1/resolve?q=Argentina").get_json()["matches"] == []
-        assert client.get("/api/v1/resolve?q=cyprus").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=thailand").get_json()["matches"][0]["id"] == "THA"
+        assert client.get("/api/v1/resolve?q=Thailand").get_json()["matches"][0]["id"] == "THA"
+        assert client.get("/api/v1/resolve?q=argentina").get_json()["matches"][0]["id"] == "ARG"
+        assert client.get("/api/v1/resolve?q=Argentina").get_json()["matches"][0]["id"] == "ARG"
+        assert client.get("/api/v1/resolve?q=cyprus").get_json()["matches"][0]["id"] == "CYP"
         assert client.get("/api/v1/resolve?q=texas").get_json()["matches"] == []
+        assert client.get("/api/v1/resolve?q=atlantis").get_json()["matches"] == []
         assert client.get("/api/v1/resolve").get_json()["matches"] == []
 
 

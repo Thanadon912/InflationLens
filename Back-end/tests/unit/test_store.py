@@ -134,6 +134,7 @@ def test_save_bundle_and_point_without_raw_response(tmp_path):
     mapping = {"provider": "test", "series_id": "S", "indicator_id": "i", "role": "r", "geography": "USA", "frequency": "monthly", "unit": "index"}
     bundle = FetchBundle("test", "https://example.test", "2026-01-01T00:00:00Z", b"raw", "application/json", ())
     raw_id = store.save_bundle(run, bundle)
+    assert store.save_points_batch(run, raw_id, ()) == []
     obs_id = store.save_point(run, raw_id, SourcePoint(mapping, "2026-01", 100.0))
     assert obs_id
 

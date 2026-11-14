@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import * as path from "path";
 
-const ARTIFACT_DIR = "/home/thanadon/.gemini/antigravity-cli/brain/c0572d7f-e7e1-4c35-a17e-ebedec0e83d9";
+const ARTIFACT_DIR = "/home/thanadon/.gemini/antigravity-cli/brain/991b8d92-a4c1-4486-948b-7b9bdf5ef178";
 
 test.describe("visual audit - capabilities studio showcase", () => {
   test("page preloader animation renders on initial load and dismisses cleanly", async ({ page }) => {

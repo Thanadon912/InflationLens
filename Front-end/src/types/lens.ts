@@ -1,4 +1,4 @@
-export type GeographyCode = "USA" | "EA";
+export type GeographyCode = string;
 export type WindowCode = "12m" | "1m" | "6m";
 export type AdjustmentCode = "as_published" | "sa" | "nsa";
 

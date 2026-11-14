@@ -24,8 +24,10 @@ Instead of reporting a single "official" inflation number, it exposes the differ
 ## What's covered, and what isn't
 
 **Covered**
-- All 10 country lenses and 8 global lenses are fully implemented calculation engines, reachable via `POST` with any caller-supplied normalized observations that satisfy the contract -- not just the two geographies below.
-- Automated official-data ingestion (`flask data sync`) is wired for **4 indicators × 2 geographies**: `headline_consumer_inflation`, `essential_cost_inflation`, `broad_money_expansion`, and `economy_wide_inflation`, for `USA` and `EA` only. Everything else (the other 6 country lenses, all 8 global lenses, any other country) works, but you supply the input data yourself.
+- All 10 country lenses and 8 global lenses are fully implemented calculation engines, backed by **222 configured country profiles** (`221` ISO 3166-1 alpha-3 economies + `EA` in `Back-end/app/config/country_profiles/`) and reachable via `POST` with any caller-supplied normalized observations that satisfy the contract.
+- Automated official-data ingestion (`flask data sync`) is wired for:
+  - **Multi-measure & multi-lens depth (`USA` and `EA`):** `headline_consumer_inflation`, `essential_cost_inflation`, `broad_money_expansion`, and `economy_wide_inflation` drawn from BLS, BEA, FRED, Eurostat, and ECB.
+  - **Global cross-section fan-out (`220` additional economies):** `headline_consumer_inflation` materialized from the World Bank annual CPI cross-section (`FP.CPI.TOTL.ZG`) in a single paginated request and persisted via batch SQLite transactions, making all **222 geographies** resolvable via `/api/v1/resolve` and `/api/v1/measures/<geography>`.
 - Ingested history depth follows each source's configured backfill window (24 months / 8 quarters by default) -- not a full historical archive.
 - Contract validation, coverage thresholds, provenance/audit trail, and the documented methodology edge cases (missing components, structural dominance, quality adjustments) are all enforced and tested.
 

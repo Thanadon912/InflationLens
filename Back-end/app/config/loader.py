@@ -107,6 +107,16 @@ def load_iso_numeric() -> dict:
     return load_yaml(CONFIG_DIR / "iso_numeric.yaml")
 
 
+def load_country_names() -> dict:
+    """ISO 3166-1 alpha-3 (+ EA) -> display name mapping (app/config/country_names.yaml).
+
+    Backs GET /api/v1/resolve and GET /api/v1/measures/<geography> so every
+    configured country profile resolves cleanly by code or English name.
+    """
+
+    return load_yaml(CONFIG_DIR / "country_names.yaml")
+
+
 def load_country_profile(geography: str) -> dict:
     clean_geo = geography.strip().upper()
     if not _SAFE_GEO_RE.match(clean_geo):

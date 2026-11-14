@@ -3,6 +3,7 @@ import pytest
 from app.config.loader import (
     ConfigError,
     available_country_profiles,
+    load_country_names,
     load_country_profile,
     load_global_weights,
     load_indicator_registry,
@@ -87,10 +88,13 @@ class TestBundledConfigFiles:
             load_country_profile("ZZZ")
 
     def test_available_country_profiles_lists_all(self):
-        assert set(available_country_profiles()) >= {"USA", "EA", "THA"}
+        profiles = set(available_country_profiles())
+        names = load_country_names()
+        assert len(profiles) == 222
+        assert profiles <= set(names.keys())
 
     def test_all_essential_basket_weights_sum_to_one(self):
-        for geo in ("USA", "EA", "THA"):
+        for geo in available_country_profiles():
             profile = load_country_profile(geo)
             weights = profile["essential_basket"]["categories"].values()
             assert sum(weights) == pytest.approx(1.0), geo

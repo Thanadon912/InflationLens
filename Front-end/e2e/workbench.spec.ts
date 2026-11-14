@@ -101,12 +101,16 @@ test.describe("workbench", () => {
   test("?q= from the landing page's hero search pre-resolves the geography", async ({ page }) => {
     await page.goto("/app.html?q=euro%20area");
     await expect(page.locator("#head-name")).toHaveText("Euro area", { timeout: 10_000 });
+
+    await page.goto("/app.html?q=France");
+    await expect(page.locator("#head-name")).toHaveText("France", { timeout: 10_000 });
+    await expect(page.locator('#geo-rail button[data-geo="FRA"]')).toHaveAttribute("aria-pressed", "true");
   });
 
   test("searching unsupported countries raises alert, stops computation, and does not fall back to USA", async ({ page }) => {
-    await page.goto("/app.html?q=Thailand");
+    await page.goto("/app.html?q=Atlantis");
     await expect(page.locator("#lens-alert")).toBeVisible();
-    await expect(page.locator("#lens-alert")).toContainText("Thailand");
+    await expect(page.locator("#lens-alert")).toContainText("Atlantis");
     await expect(page.locator("#calc-unavailable")).toBeVisible();
     await expect(page.locator("#calc-unavailable")).toContainText("NO CALCULATION PERFORMED");
     await expect(page.locator("#mgrid")).toHaveCount(0);
@@ -123,10 +127,10 @@ test.describe("workbench", () => {
 
   test("typing unsupported country in workbench and hitting Enter alerts user without computing", async ({ page }) => {
     await page.goto("/app.html");
-    await page.fill("#q", "Argentina");
+    await page.fill("#q", "Wakanda");
     await page.press("#q", "Enter");
     await expect(page.locator("#lens-alert")).toBeVisible();
-    await expect(page.locator("#lens-alert")).toContainText("Argentina");
+    await expect(page.locator("#lens-alert")).toContainText("Wakanda");
     await expect(page.locator("#calc-unavailable")).toBeVisible();
     await expect(page.locator("#mgrid")).toHaveCount(0);
   });

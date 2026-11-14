@@ -28,9 +28,9 @@ const bootPromise = (async (): Promise<LensData | null> => {
       if (matches.length > 0) {
         initialGeo = matches[0].id;
       } else {
-        // Query specified a country that the multi-measure engine cannot compute
+        // Query specified a geography not in the 222 configured profiles
         document.body.setAttribute("data-lens", "unavailable");
-        initialAlertMessage = `“${presetQuery}” is not currently supported by the calculation engine. The engine currently computes multi-dimensional inflation for the United States (USA) and Euro area (EA).`;
+        initialAlertMessage = `“${presetQuery}” could not be resolved to any of the 222 configured country profiles.`;
         initialStale = true;
         initialLens = null;
         initialUnsupportedQuery = presetQuery;

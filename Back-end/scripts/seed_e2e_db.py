@@ -105,6 +105,8 @@ def seed(db_path: Path) -> None:
     world_mapping = {"provider": "world_bank", "series_id": "FP.CPI.TOTL.ZG", "indicator_id": "median_country_inflation", "role": "country_rates", "geography": "GLOBAL", "frequency": "annual", "unit": "percent_yoy"}
     for iso3, name, value in (("USA", "United States", 3.0), ("FRA", "France", 2.4), ("VEN", "Venezuela, RB", 387.0)):
         store.save_point(run, world_bank_raw, SourcePoint({**world_mapping, "component_id": iso3}, "2024", value, provider_status=name))
+    for iso3 in ("FRA", "VEN"):
+        service.calculate_available(run, iso3, "headline_consumer_inflation")
 
     store.finish_run(run, successes=1, failures=0)
     print(f"Seeded {db_path}")

@@ -21,10 +21,22 @@ _UNSET = object()
 # Process-local cache of already-initialized SQLite files (path, st_dev, st_ino)
 # so per-request SnapshotStore() instantiations skip redundant DDL/migration
 # checks once a database file has been verified.
+#
+# Architectural note on caching (In-Memory LRU + SQLite WAL vs. Redis):
+# Read-heavy endpoints use a two-tier cache:
+#   1. Process-local OrderedDict LRU (_READ_CACHE) keyed by _db_state_token(path),
+#      which inspects (st_ino, st_mtime_ns, st_size) of both the SQLite file and
+#      its `-wal` journal (~1 microsecond stat() syscall, zero network hop).
+#      Any write from `flask data sync` or another worker updates the WAL
+#      signature and automatically invalidates stale entries across all Gunicorn
+#      workers without requiring an external Redis daemon.
+#   2. SQLite WAL persistent snapshot store for relational lineage queries.
+# Sizing _READ_CACHE_MAX_ENTRIES to 4096 holds all 222 country profiles across
+# all indicators and windows in RAM (~15-20 MB) without LRU thrashing.
 _INITIALIZED_DB_FILES: set[tuple[str, int, int]] = set()
 _WRITE_GEN: dict[str, int] = {}
 _READ_CACHE: OrderedDict[tuple[Any, ...], Any] = OrderedDict()
-_READ_CACHE_MAX_ENTRIES = 256
+_READ_CACHE_MAX_ENTRIES = 4096
 
 
 def _db_file_identity(path: Path) -> tuple[str, int, int] | None:
@@ -217,27 +229,71 @@ class SnapshotStore:
         return raw_id
 
     def save_point(self, run_id: str, raw_id: str | None, point: SourcePoint, *, role: str | None = None, value: float | None = None, unit: str | None = None, provider: str | None = None, source_series_id: str | None = None, lineage: tuple[str, ...] = ()) -> str:
-        m = point.mapping
-        obs_id = str(uuid.uuid4())
-        actual_role = role or m["role"]
-        actual_value = point.value if value is None else value
-        revised = point.is_revised or self._has_changed_value(m["geography"], m["indicator_id"], actual_role, m.get("component_id"), point.period, actual_value)
+        return self.save_points_batch(
+            run_id,
+            raw_id,
+            (point,),
+            role=role,
+            value=value,
+            unit=unit,
+            provider=provider,
+            source_series_id=source_series_id,
+            lineage=lineage,
+        )[0]
+
+    def save_points_batch(
+        self,
+        run_id: str,
+        raw_id: str | None,
+        points: tuple[SourcePoint, ...] | list[SourcePoint],
+        *,
+        role: str | None = None,
+        value: float | None = None,
+        unit: str | None = None,
+        provider: str | None = None,
+        source_series_id: str | None = None,
+        lineage: tuple[str, ...] = (),
+    ) -> list[str]:
+        """Persist a batch of observations in a single SQLite transaction.
+
+        Cross-sectional World Bank syncs yield thousands of country-year rows
+        per bundle; committing once per bundle instead of once per observation
+        avoids N+1 disk fsyncs while preserving per-row revision detection.
+        """
+        if not points:
+            return []
+        obs_ids: list[str] = []
         with self.connect() as db:
-            db.execute(
-                """INSERT INTO normalized_observations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (obs_id, run_id, raw_id, provider or m["provider"], source_series_id or m["series_id"], m["indicator_id"], actual_role, m["geography"], m.get("component_id"), m["frequency"], unit or m["unit"], m.get("currency"), point.period, actual_value, point.mapping.get("retrieved_at", utc_now()) if raw_id is None else self._raw_retrieved_at(raw_id), point.publication_date, _bool(m.get("seasonally_adjusted")), m.get("source_url"), int(point.is_estimated), int(revised), point.data_vintage, point.provider_status, "validated"),
+            raw_retrieved = (
+                db.execute("SELECT retrieved_at FROM raw_responses WHERE id=?", (raw_id,)).fetchone()[0]
+                if raw_id is not None
+                else None
             )
-            db.executemany("INSERT INTO observation_lineage VALUES(?,?)", [(obs_id, source_id) for source_id in lineage])
-        return obs_id
-
-    def _raw_retrieved_at(self, raw_id: str) -> str:
-        with self.connect() as db:
-            return db.execute("SELECT retrieved_at FROM raw_responses WHERE id=?", (raw_id,)).fetchone()[0]
-
-    def _has_changed_value(self, geography, indicator, role, component, period, value) -> bool:
-        with self.connect() as db:
-            row = db.execute("""SELECT value FROM normalized_observations WHERE geography=? AND indicator_id=? AND role=? AND component_id IS ? AND observation_period=? ORDER BY retrieved_at DESC, rowid DESC LIMIT 1""", (geography, indicator, role, component, period)).fetchone()
-        return row is not None and float(row["value"]) != float(value)
+            for point in points:
+                m = point.mapping
+                obs_id = str(uuid.uuid4())
+                obs_ids.append(obs_id)
+                actual_role = role or m["role"]
+                actual_value = point.value if value is None else value
+                prev = db.execute(
+                    "SELECT value FROM normalized_observations WHERE geography=? AND indicator_id=? AND role=? AND component_id IS ? AND observation_period=? ORDER BY retrieved_at DESC, rowid DESC LIMIT 1",
+                    (m["geography"], m["indicator_id"], actual_role, m.get("component_id"), point.period),
+                ).fetchone()
+                revised = point.is_revised or (prev is not None and float(prev["value"]) != float(actual_value))
+                retrieved_at = raw_retrieved if raw_retrieved is not None else point.mapping.get("retrieved_at", utc_now())
+                db.execute(
+                    "INSERT INTO normalized_observations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        obs_id, run_id, raw_id, provider or m["provider"], source_series_id or m["series_id"],
+                        m["indicator_id"], actual_role, m["geography"], m.get("component_id"), m["frequency"],
+                        unit or m["unit"], m.get("currency"), point.period, actual_value, retrieved_at,
+                        point.publication_date, _bool(m.get("seasonally_adjusted")), m.get("source_url"),
+                        int(point.is_estimated), int(revised), point.data_vintage, point.provider_status, "validated",
+                    ),
+                )
+                if lineage:
+                    db.executemany("INSERT INTO observation_lineage VALUES(?,?)", [(obs_id, source_id) for source_id in lineage])
+        return obs_ids
 
     def add_issue(self, run_id: str, code: str, message: str, *, severity: str = "error", provider: str | None = None, geography: str | None = None, indicator_id: str | None = None, details: dict | None = None) -> str:
         issue_id = str(uuid.uuid4())

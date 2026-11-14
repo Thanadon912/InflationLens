@@ -73,6 +73,8 @@ def provider_transport(monkeypatch):
             csv_body = "KEY,TIME_PERIOD,OBS_VALUE,OBS_STATUS,UNIT\n" + "\n".join(f"BSI.KEY,{p},{17000000+i*10000},{'P' if p == '2026-04' else 'A'},EUR" for i, p in enumerate(_months()))
             return httpx.Response(200, text=csv_body, headers={"content-type": "text/csv"})
         if host == "api.worldbank.org":
+            if "/country/all/" in path:
+                return httpx.Response(200, json=[{"page": 1, "pages": 1}, [{"date": "2025", "value": 2.4, "countryiso3code": "FRA", "obs_status": ""}]])
             return httpx.Response(200, json=[{"page": 1, "pages": 1}, [{"date": "2025", "value": 1000000, "obs_status": ""}]])
         raise AssertionError(f"unexpected URL {request.url}")
 

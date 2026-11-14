@@ -1,0 +1,72 @@
+# Country profile: Lebanon (LBN).
+#
+# Standardized country configuration for the multi-dimensional calculation
+# engine (CALCULATION_ENGINE_GUIDELINES.md section 11). Preserves explicit
+# basket weights, trim bounds, housing assumptions, and methodology version
+# outside engine calculation logic.
+country: LBN
+profile_version: "1.1.0"
+
+headline_consumer:
+  source_indicator: headline_consumer_inflation
+
+underlying:
+  preferred_method: weighted_median
+  fallback_methods:
+    - trimmed_mean
+    - official_core
+  trimmed_mean:
+    alpha: 0.10
+    beta: 0.10
+    boundary_handling: exclude_whole
+  core_exclusion:
+    excluded_categories: [food, energy]
+
+essential_basket:
+  min_coverage_percent: 80.0
+  structurally_dominant_weight: 0.20
+  version: "2026.1"
+  methodology: standardized_portfolio_project_weights
+  categories:
+    food: 0.28
+    housing: 0.30
+    energy: 0.10
+    transport: 0.14
+    healthcare: 0.09
+    communications: 0.09
+
+fixed_lifestyle:
+  basket_version: "2026.1"
+  replacement_hierarchy:
+    - identical_product
+    - same_brand_size
+    - same_spec_quality
+    - closest_equivalent
+    - category_proxy
+
+housing:
+  mortgage_term_years: 30
+  loan_to_value: 0.80
+  payment_frequency: monthly
+  representative_property_price: 250000
+  representative_mortgage_rate: 0.055
+  pressure_score_weights:
+    rent: 0.4
+    mortgage: 0.4
+    burden: 0.2
+
+money:
+  preferred_aggregate: M2
+
+producer_import:
+  component_weights:
+    ppi: 0.35
+    import: 0.35
+    energy: 0.20
+    commodity: 0.10
+
+purchasing_power:
+  income_definition: gross
+  wage_measure: mean
+
+methodology_version: "1.0.2"
