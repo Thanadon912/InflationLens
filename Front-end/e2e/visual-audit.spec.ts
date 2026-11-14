@@ -1,7 +1,14 @@
 import { test, expect } from "@playwright/test";
+import * as fs from "fs";
 import * as path from "path";
 
-const ARTIFACT_DIR = "/home/thanadon/.gemini/antigravity-cli/brain/991b8d92-a4c1-4486-948b-7b9bdf5ef178";
+const LOCAL_ARTIFACT_DIR = "/home/thanadon/.gemini/antigravity-cli/brain/991b8d92-a4c1-4486-948b-7b9bdf5ef178";
+const ARTIFACT_DIR =
+  process.env.ARTIFACT_DIR ||
+  (fs.existsSync(LOCAL_ARTIFACT_DIR)
+    ? LOCAL_ARTIFACT_DIR
+    : path.resolve(process.cwd(), "test-results", "visual-audit"));
+fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
 
 test.describe("visual audit - capabilities studio showcase", () => {
   test("page preloader animation renders on initial load and dismisses cleanly", async ({ page }) => {

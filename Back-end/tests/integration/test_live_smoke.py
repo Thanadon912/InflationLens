@@ -35,7 +35,7 @@ START_YEAR = datetime.now(UTC).year - 1
 
 @pytest.fixture()
 def client():
-    c = ResilientClient(timeout=30.0, attempts=2)
+    c = ResilientClient(timeout=30.0, attempts=4)
     yield c
     c.client.close()
 
