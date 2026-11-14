@@ -461,7 +461,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                         {selectedMeasure.note || "Official published statistical index compiled by statistical agencies."}
                       </p>
                     </div>
-                    <a className="btn btn-outline" href="app.html">
+                    <a className="btn btn-outline" href="/workbench">
                       Compare on Live Axis in Workbench →
                     </a>
                   </div>
@@ -570,7 +570,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                         {selectedCatName === "Communications" && "Wireless telephone services, internet access, and computing hardware. Historically a disinflationary component."}
                       </p>
                     </div>
-                    <a className="btn btn-outline" href="app.html">
+                    <a className="btn btn-outline" href="/workbench">
                       Explore All Categories in Workbench →
                     </a>
                   </div>
@@ -671,7 +671,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                         ))}
                       </div>
                     </div>
-                    <a className="btn btn-outline" href="app.html">
+                    <a className="btn btn-outline" href="/workbench">
                       View All 50 Modelled States in Workbench →
                     </a>
                   </div>
@@ -759,7 +759,7 @@ export function ShowcaseStage({ lens, unavailable }: ShowcaseStageProps) {
                         Adjusting weights to match your personal budget reveals your true economic reality.
                       </p>
                     </div>
-                    <a className="btn btn-outline" href="app.html">
+                    <a className="btn btn-outline" href="/workbench">
                       Full Custom Weighting on Workbench →
                     </a>
                   </div>

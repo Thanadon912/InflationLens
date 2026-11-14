@@ -32,8 +32,8 @@ export function LandingPage({
     e.preventDefault();
     const q = heroQuery.trim();
     window.location.href = q
-      ? `app.html?q=${encodeURIComponent(q)}`
-      : "app.html";
+      ? `/workbench?q=${encodeURIComponent(q)}`
+      : "/workbench";
   };
 
   const cpi = lens?.us.measures.find((m) => m.id === "cpi");
@@ -71,9 +71,9 @@ export function LandingPage({
             <a href="#showcase">Showcase</a>
             <a href="#engine">Engine</a>
             <a href="#sources">Sources</a>
-            <a href="app.html">Workbench</a>
+            <a href="/workbench">Workbench</a>
           </nav>
-          <a className="btn btn-primary" href="app.html">
+          <a className="btn btn-primary" href="/workbench">
             Open the engine
           </a>
         </div>
@@ -133,8 +133,8 @@ export function LandingPage({
                 </div>
                 <p className="hints">
                   <span>Try</span>
-                  <a href="app.html?q=United+States">United States</a>
-                  <a href="app.html?q=Euro+area">Euro area</a>
+                  <a href="/workbench?q=United+States">United States</a>
+                  <a href="/workbench?q=Euro+area">Euro area</a>
                 </p>
               </div>
             </div>
@@ -366,7 +366,7 @@ export function LandingPage({
             returned at once and the sources attached.
           </p>
           <div className="row">
-            <a className="btn-lg" href="app.html">
+            <a className="btn-lg" href="/workbench">
               Open the engine
             </a>
             <a

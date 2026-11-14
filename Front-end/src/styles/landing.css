@@ -319,3 +319,79 @@ footer{border-top:1px solid var(--color-divider);padding-block:calc(2*var(--lead
 
 #lens-alert{display:none;background:var(--field);color:var(--paper);font-size:12.5px;letter-spacing:.02em;padding:9px var(--edge);text-align:center;border-bottom:2px solid var(--color-accent-300)}
 #lens-alert:not([hidden]){display:block}
+
+/* ═══ IMPECCABLE DOCTRINE — Precision Editorial & Telemetry Motion ═══ */
+:root{
+  --ease-out-expo:cubic-bezier(0.22,1,0.36,1);
+  --ease-instrument:cubic-bezier(0.16,1,0.3,1);
+}
+
+@keyframes impeccableReveal{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+
+@keyframes barGrow{
+  from{transform:scaleX(0)}
+  to{transform:scaleX(1)}
+}
+
+@keyframes pulseBeacon{
+  0%,100%{box-shadow:0 0 6px var(--color-accent-400),0 0 0 0 color-mix(in srgb,var(--color-accent-300) 45%,transparent)}
+  50%{box-shadow:0 0 10px var(--color-accent-300),0 0 0 5px color-mix(in srgb,var(--color-accent-300) 0%,transparent)}
+}
+
+/* Staggered Hero & Readout Choreography */
+.hero .display .l:nth-child(1){animation:impeccableReveal .65s var(--ease-out-expo) both}
+.hero .display .l:nth-child(2){animation:impeccableReveal .65s var(--ease-out-expo) .08s both}
+.hero .lede{animation:impeccableReveal .65s var(--ease-out-expo) .16s both}
+.hero .search{animation:impeccableReveal .65s var(--ease-out-expo) .24s both}
+.hero-aside .plate{animation:impeccableReveal .75s var(--ease-out-expo) .2s both;transition:border-color .28s var(--ease-out-expo),box-shadow .28s var(--ease-out-expo),transform .28s var(--ease-out-expo)}
+.hero-aside .plate:hover{border-color:color-mix(in srgb,var(--steel) 55%,transparent);box-shadow:var(--shadow-md);transform:translateY(-2px)}
+
+.strip div:nth-child(1){animation:impeccableReveal .55s var(--ease-out-expo) .28s both}
+.strip div:nth-child(2){animation:impeccableReveal .55s var(--ease-out-expo) .34s both}
+.strip div:nth-child(3){animation:impeccableReveal .55s var(--ease-out-expo) .4s both}
+.strip div:nth-child(4){animation:impeccableReveal .55s var(--ease-out-expo) .46s both}
+
+/* Blueprint Registration Crosshair Lock-In */
+.mk>i{transition:transform .28s var(--ease-out-expo),color .28s var(--ease-out-expo)}
+.mk:hover>i{color:var(--steel);transform:scale(1.18)}
+#showcase .mk:hover>i{color:var(--color-accent-300);transform:scale(1.18)}
+
+/* Masthead Brand & Hairline Nav Sweep */
+.brand svg{transition:transform .32s var(--ease-out-expo),color .25s ease}
+.brand:hover svg{transform:rotate(-8deg) scale(1.08)}
+.top nav a{position:relative;padding-bottom:3px;transition:color .2s ease}
+.top nav a::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1.5px;background:var(--steel);transform:scaleX(0);transform-origin:left center;transition:transform .26s var(--ease-out-expo)}
+.top nav a:hover::after{transform:scaleX(1)}
+
+/* Tactile Buttons & Search Hints */
+.btn,.btn-lg,.btn-outline,.sfield .go,.hints a{transition:background-color .2s ease,border-color .2s ease,color .2s ease,transform .2s var(--ease-out-expo),box-shadow .2s ease}
+.btn-primary:hover,.btn-lg:hover,.btn-outline:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm)}
+.btn-primary:active,.btn-lg:active,.btn-outline:active,.sfield .go:active{transform:translateY(0)}
+.hints a:hover{transform:translateY(-1px);background:color-mix(in srgb,var(--steel) 8%,transparent)}
+
+/* Studio Telemetry Bars, Gauges & Card Micro-Interactions */
+.hub-pane{animation:impeccableReveal .32s var(--ease-out-expo) both}
+.m-row,.cat-card,.region-card,.measure-detail-box,.card-stat{transition:background-color .22s ease,border-color .22s ease,transform .24s var(--ease-out-expo),box-shadow .24s var(--ease-out-expo)}
+.m-row:hover,.cat-card:hover,.region-card:hover{transform:translateX(2px)}
+.m-bar i,.cat-b i{transform-origin:left center;animation:barGrow .55s var(--ease-out-expo) both;transition:width .45s var(--ease-out-expo)}
+.axis-range{transition:left .45s var(--ease-out-expo),width .45s var(--ease-out-expo)}
+.axis-tick{transition:left .45s var(--ease-out-expo)}
+.min-dot{animation:pulseBeacon 2.8s infinite ease-in-out}
+.state-chip{transition:background-color .18s ease,border-color .18s ease,transform .18s var(--ease-out-expo)}
+.state-chip:hover{background:color-mix(in srgb,var(--color-accent-300) 20%,transparent);border-color:var(--color-accent-300);transform:translateY(-1px)}
+
+/* Engine Architecture Cells & Source Ledger Rows */
+.cell{transition:border-color .25s var(--ease-out-expo),transform .25s var(--ease-out-expo),box-shadow .25s var(--ease-out-expo)}
+.cell:hover{border-color:var(--steel);transform:translateY(-3px);box-shadow:var(--shadow-md)}
+table.src tr{transition:background-color .18s ease}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.01ms!important;
+    animation-iteration-count:1!important;
+    transition-duration:.01ms!important;
+  }
+}

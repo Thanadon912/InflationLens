@@ -68,6 +68,6 @@ test.describe("landing page", () => {
     await page.goto("/index.html");
     await page.fill("#hero-q", "euro area");
     await page.click("#hero-search button[type=submit]");
-    await expect(page).toHaveURL(/app\.html\?q=euro(%20|\+)area/);
+    await expect(page).toHaveURL(/\/(workbench|app\.html)\?q=euro(%20|\+)area/);
   });
 });

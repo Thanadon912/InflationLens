@@ -341,7 +341,7 @@ export function WorkbenchPage({
 
       <header className="top">
         <div className="bar">
-          <a className="brand" href="index.html">
+          <a className="brand" href="/">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -846,7 +846,7 @@ export function WorkbenchPage({
               </li>
             ))}
           </ul>
-          <a className="btn-out" href="index.html#sources">
+          <a className="btn-out" href="/#sources">
             Full source ledger
           </a>
           <a className="btn-out" href="#export" onClick={handleExportCsv}>

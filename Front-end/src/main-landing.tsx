@@ -6,6 +6,16 @@ import { LandingPage } from "./pages/LandingPage";
 import "./styles/design-system.css";
 import "./styles/landing.css";
 
+// Strip raw .html filename from the address bar so clean routes are always displayed
+if (window.location.pathname.endsWith("/index.html")) {
+  const cleanPath = window.location.pathname.replace(/\/index\.html$/, "/") || "/";
+  window.history.replaceState(
+    null,
+    "",
+    `${cleanPath}${window.location.search}${window.location.hash}`,
+  );
+}
+
 const initialLens = await initializeGlobalLensBridge();
 
 const rootEl = document.getElementById("root");

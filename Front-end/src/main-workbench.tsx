@@ -7,6 +7,16 @@ import type { GeographyCode, LensData } from "./types/lens";
 import "./styles/design-system.css";
 import "./styles/workbench.css";
 
+// Strip raw .html filename from the address bar so clean routes are always displayed
+if (window.location.pathname.endsWith("/app.html")) {
+  const cleanPath = window.location.pathname.replace(/\/app\.html$/, "/workbench");
+  window.history.replaceState(
+    null,
+    "",
+    `${cleanPath}${window.location.search}${window.location.hash}`,
+  );
+}
+
 document.body.dataset.apiBase = API_BASE;
 window.LENS_API = {
   base: API_BASE,
