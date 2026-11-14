@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
@@ -63,9 +64,13 @@ def create_app() -> Flask:
 
     allowed_origins = os.environ.get(
         "CORS_ALLOWED_ORIGINS",
-        "http://localhost:3000,http://localhost:5173,http://localhost:4173",
+        "http://localhost:3000,http://localhost:3100,http://localhost:5173,http://localhost:4173",
     )
-    CORS(app, resources={r"/api/*": {"origins": [o.strip() for o in allowed_origins.split(",") if o.strip()]}})
+    origins: list[str | re.Pattern[str]] = [
+        o.strip() for o in allowed_origins.split(",") if o.strip()
+    ]
+    origins.append(re.compile(r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"))
+    CORS(app, resources={r"/api/*": {"origins": origins}})
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
     # httpx logs full request URLs at INFO, which can include provider API
